@@ -470,6 +470,56 @@ One of the following keywords to indicate type of plug (symbol that is shown at 
 
 [![ex-220](img/ex-220.png)](https://anseki.github.io/leader-line/)
 
+#### `LeaderLine.registerPlug(name, spec)`
+
+Built-in plugs such as `disc` and `square` are implemented internally as SVG defs plus geometry metadata. `LeaderLine.registerPlug(name, spec)` lets you add custom plugs with the same model and then use the registered `name` via [`startPlug`/`endPlug`](#startplug-endplug).
+
+```js
+LeaderLine.registerPlug('diamond', {
+  markup: '<path d="M0,-7 L7,0 0,7 -7,0 Z" />',
+  bBox: {left: -7, top: -7, width: 14, height: 14},
+  noRotate: true,
+  overhead: 0,
+  outlineBase: 1,
+  outlineMax: 4
+});
+
+LeaderLine.registerPlug('play', {
+  markup: '<polygon points="-8,-6 4,0 -8,6" />',
+  bBox: {left: -8, top: -6, width: 12, height: 12},
+  noRotate: true,
+  overhead: 4,
+  outlineBase: 1,
+  outlineMax: 2.5
+});
+
+LeaderLine.registerPlug('stop', {
+  markup: '<polygon points="-2.5,-6 2.5,-6 6,-2.5 6,2.5 2.5,6 -2.5,6 -6,2.5 -6,-2.5" />',
+  bBox: {left: -6, top: -6, width: 12, height: 12},
+  noRotate: true,
+  overhead: 0,
+  outlineBase: 1,
+  outlineMax: 4
+});
+
+new LeaderLine(startElement, endElement, {
+  startPlug: 'play',
+  endPlug: 'diamond'
+});
+```
+
+The `play` plug above stays right-facing even when used as `startPlug` because `noRotate: true` bypasses the normal start-marker reversal.
+
+- `name`: A lowercase plug name that you use for `startPlug` or `endPlug`.
+- `spec.element`: An SVG element or `<svg>` element to clone into LeaderLine's shared defs.
+- `spec.markup`: An SVG markup string. Use this instead of `spec.element` when you don't already have a DOM node.
+- `spec.bBox`: Required bounds for the plug as `{left, top, width, height}`. LeaderLine derives sizing, back length and marker viewBox from this.
+- `spec.overhead`: Optional extra forward length. By default it uses the right edge of `bBox`.
+- `spec.noRotate`: Optional boolean. When `true`, the plug always keeps its authored orientation.
+- `spec.outlineBase` and `spec.outlineMax`: Optional numbers that enable [`startPlugOutline`/`endPlugOutline`](#startplugoutline-endplugoutline) for that custom plug.
+
+If your custom SVG hardcodes `fill` or `stroke`, [`startPlugColor`/`endPlugColor`](#startplugcolor-endplugcolor) and plug outlines might not affect it.
+
 ### `startPlugColor`, `endPlugColor`
 
 *Type:* string  

@@ -254,6 +254,86 @@ describe('options', function() {
       pageDone();
     });
 
+    it('custom plugs can be registered and used', function() {
+      var props = window.insProps[ll._id],
+        iframeWindow = document.getElementById('iframe1').contentWindow,
+        iframeDocument = iframeWindow.document,
+        diamondElement = document.createElementNS('http://www.w3.org/2000/svg', 'path'),
+        ll2, props2;
+
+      diamondElement.setAttribute('d', 'M0,-7 L7,0 0,7 -7,0 Z');
+      window.LeaderLine.registerPlug('diamond', {
+        element: diamondElement,
+        bBox: {left: -7, top: -7, width: 14, height: 14},
+        noRotate: true,
+        overhead: 0,
+        outlineBase: 1,
+        outlineMax: 4
+      });
+      window.LeaderLine.registerPlug('play', {
+        markup: '<polygon points="-8,-6 4,0 -8,6" />',
+        bBox: {left: -8, top: -6, width: 12, height: 12},
+        noRotate: true,
+        overhead: 4,
+        outlineBase: 1,
+        outlineMax: 2.5
+      });
+
+      expect(window.SYMBOLS.diamond).toEqual(jasmine.objectContaining({
+        elmId: 'leader-line-diamond',
+        noRotate: true,
+        overhead: 0,
+        outlineBase: 1,
+        outlineMax: 4
+      }));
+      expect(window.SYMBOLS.diamond.bBox).toEqual(jasmine.objectContaining({
+        left: -7, top: -7, width: 14, height: 14, right: 7, bottom: 7
+      }));
+      expect(window.SYMBOLS.play).toEqual(jasmine.objectContaining({
+        elmId: 'leader-line-play',
+        noRotate: true,
+        overhead: 4,
+        outlineBase: 1,
+        outlineMax: 2.5
+      }));
+      expect(window.PLUG_KEY_2_ID.diamond).toBe('diamond');
+      expect(window.PLUG_2_SYMBOL.play).toBe('play');
+      expect(props.baseWindow.document.getElementById('leader-line-diamond')).not.toBeNull();
+      expect(props.baseWindow.document.getElementById('leader-line-play')).not.toBeNull();
+
+      ll.startPlug = 'diamond';
+      expect(props.options.plugSE[0]).toBe('diamond');
+      expect(ll.startPlug).toBe('diamond');
+      expect(props.plugFaceSE[0].href.baseVal).toBe('#leader-line-diamond');
+      expect(props.plugMarkerSE[0].getAttribute('orient')).toBe('0');
+
+      ll2 = new window.LeaderLine(document.getElementById('elm3'), document.getElementById('elm4'), {
+        startPlug: 'play',
+        endPlug: 'diamond'
+      });
+      props2 = window.insProps[ll2._id];
+      expect(ll2.startPlug).toBe('play');
+      expect(ll2.endPlug).toBe('diamond');
+      expect(props2.plugFaceSE[0].href.baseVal).toBe('#leader-line-play');
+      expect(props2.plugFaceSE[1].href.baseVal).toBe('#leader-line-diamond');
+      expect(props2.plugMarkerSE[0].getAttribute('orient')).toBe('0');
+      expect(props2.baseWindow.document.getElementById('leader-line-play')).not.toBeNull();
+      expect(props2.baseWindow.document.getElementById('leader-line-diamond')).not.toBeNull();
+
+      traceLog.clear();
+      ll2.setOptions({
+        start: iframeDocument.getElementById('elm1'),
+        end: iframeDocument.getElementById('elm2')
+      });
+      expect(traceLog.log).toContain('<bindWindow>');
+      expect(props2.baseWindow).toBe(iframeWindow);
+      expect(props2.baseWindow.document.getElementById('leader-line-play')).not.toBeNull();
+      expect(props2.baseWindow.document.getElementById('leader-line-diamond')).not.toBeNull();
+
+      ll2.remove();
+      pageDone();
+    });
+
     it('anchorSE are checked', function() {
       var props = window.insProps[ll._id], value;
 

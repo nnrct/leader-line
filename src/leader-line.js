@@ -63,6 +63,17 @@
      * @property {(number|null)} outlineMax
      */
 
+    /**
+     * @typedef {Object} CustomPlugSpec
+     * @property {(string|null)} [markup]
+     * @property {(SVGElement|null)} [element]
+     * @property {BBox} bBox
+     * @property {(boolean|null)} [noRotate]
+     * @property {(number|null)} [overhead]
+     * @property {(number|null)} [outlineBase]
+     * @property {(number|null)} [outlineMax]
+     */
+
     /** @typedef {{symbolId: string, SymbolConf}} SYMBOLS */
 
     PLUG_BEHIND = 'behind',
@@ -192,6 +203,8 @@
     insProps = {}, insId = 0,
     /** @type {Object.<_id: number, props>} */
     insAttachProps = {}, insAttachId = 0,
+    /** @type {{symbolId: string, string}} */
+    customPlugDefs = {},
     svg2SupportedReverse, svg2SupportedPaintOrder, svg2SupportedDropShadow; // Supported SVG 2 features
 
   // [DEBUG]
@@ -350,6 +363,146 @@
       typeof element.getBoundingClientRect === 'function');
   }
   window.isElement = isElement; // [DEBUG/]
+
+  function isSvgNode(element) {
+    return !!(element && element.nodeType === Node.ELEMENT_NODE && element.namespaceURI === SVG_NS);
+  }
+
+  function cloneNodeToDoc(baseDocument, node) {
+    return baseDocument.importNode ? baseDocument.importNode(node, true) : node.cloneNode(true);
+  }
+
+  function getDefsNode(baseDocument) {
+    var defsSvg = baseDocument.getElementById(DEFS_ID);
+    return defsSvg && defsSvg.getElementsByTagName('defs')[0];
+  }
+
+  function parseSvgDefs(baseWindow, markup) {
+    return (new baseWindow.DOMParser()).parseFromString(
+      '<svg xmlns="' + SVG_NS + '" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1"><defs>' +
+        markup + '</defs></svg>',
+      'image/svg+xml').documentElement.getElementsByTagName('defs')[0];
+  }
+
+  function appendCustomPlugDef(baseWindow, plugId) {
+    var baseDocument = baseWindow.document, defsNode, parsedDefs;
+    if (!customPlugDefs[plugId] || baseDocument.getElementById(SYMBOLS[plugId].elmId)) { return; }
+    defsNode = getDefsNode(baseDocument);
+    if (!defsNode) { return; }
+    parsedDefs = parseSvgDefs(baseWindow, customPlugDefs[plugId]);
+    Array.prototype.slice.call(parsedDefs.childNodes).forEach(function(node) {
+      defsNode.appendChild(cloneNodeToDoc(baseDocument, node));
+    });
+  }
+
+  function appendCustomPlugDefs(baseWindow) {
+    Object.keys(customPlugDefs).forEach(function(plugId) { appendCustomPlugDef(baseWindow, plugId); });
+  }
+
+  function copyBBoxValue(bBox) {
+    var left, top, width, height, copiedBBox;
+    if (!isObject(bBox) ||
+        !isFinite(left = bBox.left) || !isFinite(top = bBox.top) ||
+        !isFinite(width = bBox.width) || !isFinite(height = bBox.height) ||
+        width <= 0 || height <= 0) {
+      throw new Error('`spec.bBox` must have finite `left`, `top`, `width` and `height`.');
+    }
+    copiedBBox = {left: left, top: top, width: width, height: height};
+    copiedBBox.right = copiedBBox.left + copiedBBox.width;
+    copiedBBox.bottom = copiedBBox.top + copiedBBox.height;
+    return copiedBBox;
+  }
+
+  function buildCustomPlugMarkup(elmId, spec) {
+    var baseDocument = document, wrapper = baseDocument.createElementNS(SVG_NS, 'g'),
+      serializer = new window.XMLSerializer(), parsedDefs, sourceNodes;
+
+    function appendSourceNode(node) {
+      wrapper.appendChild(cloneNodeToDoc(baseDocument, node));
+    }
+
+    wrapper.setAttribute('id', elmId);
+    if (spec.markup != null) {
+      if (spec.element != null || typeof spec.markup !== 'string' || !spec.markup.trim()) {
+        throw new Error('`spec.markup` must be a non-empty string and can\'t be used with `spec.element`.');
+      }
+      parsedDefs = parseSvgDefs(window, spec.markup);
+      sourceNodes = Array.prototype.filter.call(parsedDefs.childNodes, function(node) {
+        return node.nodeType === Node.ELEMENT_NODE;
+      });
+      if (!sourceNodes.length) {
+        throw new Error('`spec.markup` must contain at least one SVG element.');
+      }
+      sourceNodes.forEach(appendSourceNode);
+    } else if (spec.element != null) {
+      if (!isSvgNode(spec.element)) {
+        throw new Error('`spec.element` must be an SVG element.');
+      }
+      sourceNodes = (spec.element.localName || spec.element.nodeName).toLowerCase() === 'svg' ?
+        Array.prototype.filter.call(spec.element.childNodes, function(node) {
+          return node.nodeType === Node.ELEMENT_NODE;
+        }) : [spec.element];
+      if (!sourceNodes.length) {
+        throw new Error('`spec.element` must contain at least one SVG element.');
+      }
+      sourceNodes.forEach(appendSourceNode);
+    } else {
+      throw new Error('A custom plug requires `spec.markup` or `spec.element`.');
+    }
+
+    return serializer.serializeToString(wrapper);
+  }
+
+  function registerPlug(name, spec) {
+    var plugId = (name + '').trim().toLowerCase(),
+      bBox, symbolConf, outlineBase, outlineMax;
+    if (!/^[a-z][a-z0-9_-]*$/.test(plugId) || plugId === KEYWORD_AUTO) {
+      throw new Error('`name` must start with a letter and contain only lowercase letters, numbers, `_` or `-`.');
+    }
+    if (Object.prototype.hasOwnProperty.call(Object.prototype, plugId)) {
+      throw new Error('`' + plugId + '` is a reserved name.');
+    }
+    if (Object.prototype.hasOwnProperty.call(PLUG_KEY_2_ID, plugId)) {
+      throw new Error('`' + plugId + '` is already registered.');
+    }
+    if (!isObject(spec)) {
+      throw new Error('`spec` must be an Object.');
+    }
+
+    bBox = copyBBoxValue(spec.bBox);
+    symbolConf = {
+      elmId: APP_ID + '-' + plugId,
+      bBox: bBox,
+      widthR: bBox.width / DEFAULT_OPTIONS.lineSize,
+      heightR: bBox.height / DEFAULT_OPTIONS.lineSize,
+      bCircle: Math.max(-bBox.left, -bBox.top, bBox.right, bBox.bottom),
+      sideLen: Math.max(-bBox.top, bBox.bottom),
+      backLen: -bBox.left,
+      overhead: isFinite(spec.overhead) ? spec.overhead : bBox.right
+    };
+    if (spec.noRotate) { symbolConf.noRotate = true; }
+
+    outlineBase = spec.outlineBase;
+    outlineMax = spec.outlineMax;
+    if (outlineBase != null || outlineMax != null) {
+      if (!isFinite(outlineBase) || outlineBase <= 0 || !isFinite(outlineMax) || outlineMax <= 0) {
+        throw new Error('`spec.outlineBase` and `spec.outlineMax` must both be positive numbers.');
+      }
+      symbolConf.outlineBase = outlineBase;
+      symbolConf.outlineMax = outlineMax;
+    }
+
+    customPlugDefs[plugId] = buildCustomPlugMarkup(symbolConf.elmId, spec);
+    SYMBOLS[plugId] = symbolConf;
+    PLUG_KEY_2_ID[plugId] = plugId;
+    PLUG_2_SYMBOL[plugId] = plugId;
+
+    Object.keys(insProps).forEach(function(id) {
+      var props = insProps[id];
+      if (props.baseWindow) { appendCustomPlugDef(props.baseWindow, plugId); }
+    });
+    return plugId;
+  }
 
   /**
    * Get an element's bounding-box that contains coordinates relative to the element's document or window.
@@ -910,6 +1063,7 @@
       baseDocument.body.appendChild(defsSvg.documentElement);
       pathDataPolyfill(window, IS_GECKO);
     }
+    appendCustomPlugDefs(window);
   }
 
   function setSvgId(svg, id) {
@@ -5181,6 +5335,11 @@
       return new LeaderLineAttachment(ATTACHMENTS[attachmentName], Array.prototype.slice.call(arguments));
     };
   });
+
+  LeaderLine.registerPlug = function(name, spec) {
+    registerPlug(name, spec);
+    return LeaderLine;
+  };
 
   // Update position automatically
   LeaderLine.positionByWindowResize = true;
