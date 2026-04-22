@@ -128,7 +128,19 @@
       lineOutlineColor: 'indianred',
       lineOutlineSize: 0.25,
       plugOutlineEnabledSE: [false, false],
-      plugOutlineSizeSE: [1, 1]
+      plugOutlineSizeSE: [1, 1],
+      pathPlug: false
+    },
+    DEFAULT_PATH_PLUG = {
+      show: true,
+      plug: 'disc',
+      x: null,
+      y: null,
+      color: null,
+      size: 1,
+      outline: false,
+      outlineColor: null,
+      outlineSize: 1
     },
 
     isObject = (function() {
@@ -165,6 +177,15 @@
       plug_plugSE: {hasSE: true, iniValue: PLUG_BEHIND},
       plug_colorSE: {hasSE: true}, plug_colorTraSE: {hasSE: true, iniValue: false},
       plug_markerWidthSE: {hasSE: true}, plug_markerHeightSE: {hasSE: true},
+      pathPlug_enabled: {iniValue: false},
+      pathPlug_plug: {iniValue: PLUG_BEHIND},
+      pathPlug_color: {}, pathPlug_colorTra: {iniValue: false},
+      pathPlug_markerWidth: {}, pathPlug_markerHeight: {},
+      pathPlug_markerProp: {},
+      pathPlug_anchorPathData: {},
+      pathPlug_outlineEnabled: {iniValue: false},
+      pathPlug_outlineColor: {}, pathPlug_outlineColorTra: {iniValue: false},
+      pathPlug_outlineStrokeWidth: {}, pathPlug_outlineInStrokeWidth: {},
       lineOutline_enabled: {iniValue: false},
       lineOutline_color: {}, lineOutline_colorTra: {iniValue: false},
       lineOutline_strokeWidth: {}, lineOutline_inStrokeWidth: {},
@@ -175,7 +196,7 @@
       position_socketXYSE: {hasSE: true, hasProps: true}, position_plugOverheadSE: {hasSE: true},
       position_path: {}, position_lineStrokeWidth: {}, position_socketGravitySE: {hasSE: true},
       path_pathData: {}, path_edge: {hasProps: true},
-      viewBox_bBox: {hasProps: true}, viewBox_plugBCircleSE: {hasSE: true},
+      viewBox_bBox: {hasProps: true}, viewBox_plugBCircleSE: {hasSE: true}, viewBox_pathPlugBCircle: {iniValue: 0},
       lineMask_enabled: {iniValue: false},
       lineMask_outlineMode: {iniValue: false},
       lineMask_x: {}, lineMask_y: {},
@@ -644,6 +665,11 @@
   }
   window.getPointsLength = getPointsLength; // [DEBUG/]
 
+  function getPointsLengthSq(p0, p1) {
+    var lx = p0.x - p1.x, ly = p0.y - p1.y;
+    return lx * lx + ly * ly;
+  }
+
   function getPointOnLine(p0, p1, r) {
     var xA = p1.x - p0.x, yA = p1.y - p0.y;
     return {
@@ -831,6 +857,87 @@
     }, 0);
   }
   window.getAllPathDataLen = getAllPathDataLen; // [DEBUG/]
+
+  function getPointAtPathLength(path, len) {
+    var point = path.getPointAtLength(len);
+    return {x: point.x, y: point.y};
+  }
+
+  function getPathPlugAnchor(path, targetPoint, tangentLen) {
+    var totalLen = path.getTotalLength(), scanStep, scanLen, bestLen = 0, bestPoint, bestDist, precision,
+      prevLen, nextLen, prevPoint, nextPoint;
+
+    function clampLength(len) {
+      return len < 0 ? 0 : len > totalLen ? totalLen : len;
+    }
+
+    function updateBest(len) {
+      var point, dist;
+      len = clampLength(len);
+      point = getPointAtPathLength(path, len);
+      dist = getPointsLengthSq(point, targetPoint);
+      if (bestDist == null || dist < bestDist) {
+        bestLen = len;
+        bestPoint = point;
+        bestDist = dist;
+        return true;
+      }
+      return false;
+    }
+
+    if (!(totalLen > 0)) { return null; }
+
+    scanStep = Math.min(Math.max(totalLen / 32, 8), 32);
+    updateBest(0);
+    for (scanLen = scanStep; scanLen < totalLen; scanLen += scanStep) {
+      updateBest(scanLen);
+    }
+    updateBest(totalLen);
+
+    precision = scanStep / 2;
+    while (precision > 0.5) {
+      if (!updateBest(bestLen - precision) && !updateBest(bestLen + precision)) {
+        precision /= 2;
+      }
+    }
+
+    tangentLen = Math.min(Math.max(tangentLen, 1), totalLen / 2 || 1);
+    prevLen = clampLength(bestLen - tangentLen);
+    nextLen = clampLength(bestLen + tangentLen);
+    prevPoint = getPointAtPathLength(path, prevLen);
+    nextPoint = getPointAtPathLength(path, nextLen);
+
+    if (prevLen === bestLen && nextLen === bestLen) { return null; }
+
+    if (bestLen <= tangentLen / 2 && nextLen > bestLen) {
+      return {
+        markerProp: 'markerStart',
+        pathData: [
+          {type: 'M', values: [bestPoint.x, bestPoint.y]},
+          {type: 'L', values: [nextPoint.x, nextPoint.y]}
+        ]
+      };
+    }
+
+    if (bestLen >= totalLen - tangentLen / 2 && prevLen < bestLen) {
+      return {
+        markerProp: 'markerEnd',
+        pathData: [
+          {type: 'M', values: [prevPoint.x, prevPoint.y]},
+          {type: 'L', values: [bestPoint.x, bestPoint.y]}
+        ]
+      };
+    }
+
+    return {
+      markerProp: 'markerMid',
+      pathData: [
+        {type: 'M', values: [prevPoint.x, prevPoint.y]},
+        {type: 'L', values: [bestPoint.x, bestPoint.y]},
+        {type: 'L', values: [nextPoint.x, nextPoint.y]}
+      ]
+    };
+  }
 
   function pathDataHasChanged(a, b) {
     return a == null || b == null ||
@@ -1261,9 +1368,36 @@
       return element;
     });
 
+    props.pathPlugMask = setupMask((props.pathPlugMaskId = prefix + '-path-plug-mask'));
+    props.pathPlugMaskShape = element = props.pathPlugMask.appendChild(baseDocument.createElementNS(SVG_NS, 'use'));
+    element.className.baseVal = APP_ID + '-plug-mask-shape';
+
+    props.pathPlugOutlineMask =
+      setupMask((props.pathPlugOutlineMaskId = prefix + '-path-plug-outline-mask'));
+    props.pathPlugOutlineMaskShape =
+      element = props.pathPlugOutlineMask.appendChild(baseDocument.createElementNS(SVG_NS, 'use'));
+    element.className.baseVal = APP_ID + '-plug-outline-mask-shape';
+
+    props.pathPlugMarker = setupMarker((props.pathPlugMarkerId = prefix + '-path-plug-marker'));
+    if (IS_WEBKIT) {
+      // [WEBKIT] mask in marker is resized with rasterise
+      props.pathPlugMarker.markerUnits.baseVal = SVGMarkerElement.SVG_MARKERUNITS_USERSPACEONUSE;
+    }
+    props.pathPlugMarkerShape = props.pathPlugMarker.appendChild(baseDocument.createElementNS(SVG_NS, 'g'));
+    props.pathPlugMarkerFace =
+      props.pathPlugMarkerShape.appendChild(baseDocument.createElementNS(SVG_NS, 'use'));
+    props.pathPlugMarkerOutlineFace =
+      props.pathPlugMarkerShape.appendChild(baseDocument.createElementNS(SVG_NS, 'use'));
+    props.pathPlugMarkerOutlineFace.style.mask = 'url(#' + props.pathPlugOutlineMaskId + ')';
+    props.pathPlugMarkerOutlineFace.style.display = 'none';
+
     props.plugsFace = element = props.face.appendChild(baseDocument.createElementNS(SVG_NS, 'use'));
     element.className.baseVal = APP_ID + '-plugs-face';
     element.href.baseVal = '#' + lineShapeId;
+    element.style.display = 'none';
+
+    props.pathPlugFace = element = props.face.appendChild(baseDocument.createElementNS(SVG_NS, 'path'));
+    element.className.baseVal = APP_ID + '-plugs-face ' + APP_ID + '-line-path';
     element.style.display = 'none';
 
     // show effect (after SVG setup)
@@ -2214,6 +2348,180 @@
    * @param {props} props - `props` of `LeaderLine` instance.
    * @returns {boolean} `true` if it was changed.
    */
+  function updatePathPlug(props) {
+    traceLog.add('<updatePathPlug>'); // [DEBUG/]
+    var options = props.options, curStats = props.curStats, aplStats = props.aplStats,
+      pathPlugOptions = options.pathPlug, pathList = props.pathList.animVal || props.pathList.baseVal,
+      enabled, plugId, symbolConf, value, pathPlugAnchor, pathPlugMarkerOrient,
+      updated = false;
+
+    curStats.pathPlug_anchorPathData = null;
+    value = 0;
+    if (isObject(pathPlugOptions) && pathPlugOptions.show !== false &&
+        isFinite(pathPlugOptions.x) && isFinite(pathPlugOptions.y) &&
+        (plugId = pathPlugOptions.plug) !== PLUG_BEHIND &&
+        (symbolConf = SYMBOLS[PLUG_2_SYMBOL[plugId]]) && pathList) {
+      enabled = !!(pathPlugAnchor = getPathPlugAnchor(props.linePath, {
+        x: pathPlugOptions.x + props.baseWindow.pageXOffset,
+        y: pathPlugOptions.y + props.baseWindow.pageYOffset
+      }, curStats.line_strokeWidth));
+    } else {
+      enabled = false;
+      plugId = PLUG_BEHIND;
+      symbolConf = null;
+    }
+
+    updated = setStat(props, curStats, 'pathPlug_enabled', enabled) || updated;
+    updated = setStat(props, curStats, 'pathPlug_plug', plugId) || updated;
+
+    if (enabled) {
+      value = pathPlugOptions.color || curStats.line_color;
+      updated = setStat(props, curStats, 'pathPlug_color', value) || updated;
+      updated = setStat(props, curStats, 'pathPlug_colorTra', getAlpha(value)[0] < 1) || updated;
+
+      value = symbolConf.widthR * pathPlugOptions.size;
+      if (IS_WEBKIT) { value *= curStats.line_strokeWidth; }
+      updated = setStat(props, curStats, 'pathPlug_markerWidth', value) || updated;
+
+      value = symbolConf.heightR * pathPlugOptions.size;
+      if (IS_WEBKIT) { value *= curStats.line_strokeWidth; }
+      updated = setStat(props, curStats, 'pathPlug_markerHeight', value) || updated;
+
+      value = pathPlugOptions.outline && !!symbolConf.outlineBase;
+      updated = setStat(props, curStats, 'pathPlug_outlineEnabled', value) || updated;
+      value = pathPlugOptions.outlineColor || curStats.lineOutline_color;
+      updated = setStat(props, curStats, 'pathPlug_outlineColor', value) || updated;
+      updated = setStat(props, curStats, 'pathPlug_outlineColorTra', getAlpha(value)[0] < 1) || updated;
+
+      if (symbolConf.outlineBase) {
+        value = pathPlugOptions.outlineSize;
+        if (value > symbolConf.outlineMax) { value = symbolConf.outlineMax; }
+        value *= symbolConf.outlineBase * 2;
+        updated = setStat(props, curStats, 'pathPlug_outlineStrokeWidth', value) || updated;
+        updated = setStat(props, curStats, 'pathPlug_outlineInStrokeWidth',
+          curStats.pathPlug_outlineColorTra ?
+            value - SHAPE_GAP / (curStats.line_strokeWidth / DEFAULT_OPTIONS.lineSize) /
+              pathPlugOptions.size * 2 :
+            value / 2) || updated;
+      }
+
+      curStats.pathPlug_anchorPathData = pathPlugAnchor.pathData;
+      updated = setStat(props, curStats, 'pathPlug_markerProp', pathPlugAnchor.markerProp) || updated;
+      value = symbolConf.bCircle * (curStats.line_strokeWidth / DEFAULT_OPTIONS.lineSize) * pathPlugOptions.size;
+    } else {
+      updated = setStat(props, curStats, 'pathPlug_outlineEnabled', false) || updated;
+      updated = setStat(props, curStats, 'pathPlug_markerProp', null) || updated;
+    }
+    curStats.viewBox_pathPlugBCircle = value;
+
+    if (setStat(props, aplStats, 'pathPlug_enabled', (value = curStats.pathPlug_enabled)
+        /* [DEBUG] */, null, 'pathPlug_enabled=%s'/* [/DEBUG] */)) {
+      props.pathPlugFace.style.display = value ? 'inline' : 'none';
+      updated = true;
+    }
+
+    if (curStats.pathPlug_enabled) {
+      props.pathPlugFace.style.strokeWidth = curStats.line_strokeWidth + 'px';
+
+      if (setStat(props, aplStats, 'pathPlug_plug', plugId
+          /* [DEBUG] */, null, 'pathPlug_plug=%s'/* [/DEBUG] */)) {
+        props.pathPlugMarkerFace.href.baseVal =
+          props.pathPlugMarkerOutlineFace.href.baseVal =
+          props.pathPlugMaskShape.href.baseVal =
+          props.pathPlugOutlineMaskShape.href.baseVal = '#' + symbolConf.elmId;
+        [props.pathPlugMask, props.pathPlugOutlineMask].forEach(function(mask) {
+          mask.x.baseVal.value = symbolConf.bBox.left;
+          mask.y.baseVal.value = symbolConf.bBox.top;
+          mask.width.baseVal.value = symbolConf.bBox.width;
+          mask.height.baseVal.value = symbolConf.bBox.height;
+        });
+        pathPlugMarkerOrient = symbolConf.noRotate ? '0' : 'auto';
+        setMarkerOrient(props, props.pathPlugMarker, pathPlugMarkerOrient,
+          symbolConf.bBox, props.svg, props.pathPlugMarkerShape, props.pathPlugFace);
+        updated = true;
+        if (IS_GECKO) {
+          // [GECKO] path plug is not updated when the plug is changed
+          forceReflowAdd(props, props.pathPlugFace);
+        }
+      }
+
+      if (setStat(props, aplStats, 'pathPlug_color', (value = curStats.pathPlug_color)
+          /* [DEBUG] */, null, 'pathPlug_color=%s'/* [/DEBUG] */)) {
+        props.pathPlugMarkerFace.style.fill = value;
+        updated = true;
+      }
+
+      if (setStat(props, aplStats, 'pathPlug_markerWidth', (value = curStats.pathPlug_markerWidth)
+          /* [DEBUG] */, null, 'pathPlug_markerWidth%_'/* [/DEBUG] */)) {
+        props.pathPlugMarker.markerWidth.baseVal.value = value;
+        updated = true;
+      }
+
+      if (setStat(props, aplStats, 'pathPlug_markerHeight', (value = curStats.pathPlug_markerHeight)
+          /* [DEBUG] */, null, 'pathPlug_markerHeight%_'/* [/DEBUG] */)) {
+        props.pathPlugMarker.markerHeight.baseVal.value = value;
+        updated = true;
+      }
+
+      if (pathDataHasChanged(curStats.pathPlug_anchorPathData, aplStats.pathPlug_anchorPathData)) {
+        traceLog.add('pathPlug_anchorPathData'); // [DEBUG/]
+        props.pathPlugFace.setPathData(curStats.pathPlug_anchorPathData);
+        aplStats.pathPlug_anchorPathData = curStats.pathPlug_anchorPathData;
+        updated = true;
+      }
+
+      if (setStat(props, aplStats, 'pathPlug_markerProp', (value = curStats.pathPlug_markerProp)
+          /* [DEBUG] */, null, 'pathPlug_markerProp=%s'/* [/DEBUG] */)) {
+        props.pathPlugFace.style.markerStart =
+          props.pathPlugFace.style.markerMid =
+          props.pathPlugFace.style.markerEnd = 'none';
+        if (value) { props.pathPlugFace.style[value] = 'url(#' + props.pathPlugMarkerId + ')'; }
+        updated = true;
+      }
+
+      if (setStat(props, aplStats, 'pathPlug_outlineEnabled', (value = curStats.pathPlug_outlineEnabled)
+          /* [DEBUG] */, null, 'pathPlug_outlineEnabled=%s'/* [/DEBUG] */)) {
+        if (value) {
+          props.pathPlugMarkerFace.style.mask = 'url(#' + props.pathPlugMaskId + ')';
+          props.pathPlugMarkerOutlineFace.style.display = 'inline';
+        } else {
+          props.pathPlugMarkerFace.style.mask = 'none';
+          props.pathPlugMarkerOutlineFace.style.display = 'none';
+        }
+        updated = true;
+      }
+
+      if (curStats.pathPlug_outlineEnabled) {
+        if (setStat(props, aplStats, 'pathPlug_outlineColor', (value = curStats.pathPlug_outlineColor)
+            /* [DEBUG] */, null, 'pathPlug_outlineColor=%s'/* [/DEBUG] */)) {
+          props.pathPlugMarkerOutlineFace.style.fill = value;
+          updated = true;
+        }
+
+        if (setStat(props, aplStats, 'pathPlug_outlineStrokeWidth', (value = curStats.pathPlug_outlineStrokeWidth)
+            /* [DEBUG] */, null, 'pathPlug_outlineStrokeWidth%_'/* [/DEBUG] */)) {
+          props.pathPlugOutlineMaskShape.style.strokeWidth = value + 'px';
+          updated = true;
+        }
+
+        if (setStat(props, aplStats, 'pathPlug_outlineInStrokeWidth',
+            (value = curStats.pathPlug_outlineInStrokeWidth)
+            /* [DEBUG] */, null, 'pathPlug_outlineInStrokeWidth%_'/* [/DEBUG] */)) {
+          props.pathPlugMaskShape.style.strokeWidth = value + 'px';
+          updated = true;
+        }
+      }
+    }
+
+    if (!updated) { traceLog.add('not-updated'); } // [DEBUG/]
+    traceLog.add('</updatePathPlug>'); // [DEBUG/]
+    return updated;
+  }
+
+  /**
+   * @param {props} props - `props` of `LeaderLine` instance.
+   * @returns {boolean} `true` if it was changed.
+   */
   function updateViewBox(props) {
     traceLog.add('<updateViewBox>'); // [DEBUG/]
     var curStats = props.curStats, aplStats = props.aplStats,
@@ -2224,7 +2532,8 @@
 
     // Expand bBox with `line` or symbols, and event
     padding = Math.max(curStats.line_strokeWidth / 2,
-      curStats.viewBox_plugBCircleSE[0] || 0, curStats.viewBox_plugBCircleSE[1] || 0);
+      curStats.viewBox_plugBCircleSE[0] || 0, curStats.viewBox_plugBCircleSE[1] || 0,
+      curStats.viewBox_pathPlugBCircle || 0);
     edge = {x1: curEdge.x1 - padding, y1: curEdge.y1 - padding,
       x2: curEdge.x2 + padding, y2: curEdge.y2 + padding};
     if (props.events.new_edge4viewBox) {
@@ -2515,6 +2824,9 @@
     if (needs.path || updated.position) {
       updated.path = updatePath(props);
     }
+    if (needs.pathPlug || props.curStats.pathPlug_enabled && (updated.line || updated.lineOutline || updated.path)) {
+      updated.pathPlug = updatePathPlug(props);
+    }
     updated.viewBox = updateViewBox(props);
     updated.mask = updateMask(props);
     if (needs.effect) {
@@ -2528,6 +2840,10 @@
     if (IS_BLINK && updated.plug && !updated.line) {
       // [BLINK] plugColorSE is not updated when Line is not changed
       forceReflowAdd(props, props.plugsFace);
+    }
+    if (IS_BLINK && updated.pathPlug && !updated.line) {
+      // [BLINK] marker face is not updated when Line is not changed
+      forceReflowAdd(props, props.pathPlugFace);
     }
     forceReflowApply(props);
 
@@ -2664,6 +2980,7 @@
       plugOutlineEnabledSE    startPlugOutline, endPlugOutline
       plugOutlineColorSE      startPlugOutlineColor, endPlugOutlineColor
       plugOutlineSizeSE       startPlugOutlineSize, endPlugOutlineSize
+      pathPlug                pathPlug
       labelSEM                startLabel, endLabel, middleLabel
     */
     var options = props.options,
@@ -2847,6 +3164,82 @@
         null, 'plugOutlineSizeSE', i, DEFAULT_OPTIONS.plugOutlineSizeSE[i],
         function(value) { return value >= 1; }) || needs.plugOutline;
     });
+
+    // pathPlug
+    if (newOptions.hasOwnProperty('pathPlug')) {
+      (function() {
+        var newOption = newOptions.pathPlug, optionValue = false, changed = false;
+
+        function setNumber(propName) {
+          if (newOption[propName] != null && isFinite(newOption[propName]) &&
+              newOption[propName] !== optionValue[propName]) {
+            optionValue[propName] = newOption[propName];
+            changed = true;
+          }
+        }
+
+        function setString(propName, allowAuto) {
+          var value;
+          if (newOption[propName] != null && typeof newOption[propName] === 'string') {
+            value = newOption[propName].trim();
+            if ((allowAuto && value.toLowerCase() === KEYWORD_AUTO ? null : value || false) !== false &&
+                (allowAuto && value.toLowerCase() === KEYWORD_AUTO ? null : value) !== optionValue[propName]) {
+              optionValue[propName] = allowAuto && value.toLowerCase() === KEYWORD_AUTO ? null : value;
+              changed = true;
+            }
+          }
+        }
+
+        if (!newOption) {
+          if (options.pathPlug !== false) {
+            options.pathPlug = false;
+            needs.pathPlug = true;
+          }
+          return;
+        }
+
+        if (!isObject(newOption)) { return; }
+
+        optionValue = isObject(options.pathPlug) ? copyTree(options.pathPlug) : copyTree(DEFAULT_PATH_PLUG);
+
+        if (typeof newOption.show === 'boolean' && newOption.show !== optionValue.show) {
+          optionValue.show = newOption.show;
+          changed = true;
+        }
+
+        if (newOption.plug != null) {
+          var plugKey = (newOption.plug + '').toLowerCase(), plugId;
+          if ((plugId = PLUG_KEY_2_ID[plugKey]) && plugId !== optionValue.plug) {
+            optionValue.plug = plugId;
+            changed = true;
+          }
+        }
+
+        setNumber('x');
+        setNumber('y');
+        setString('color', true);
+        if (newOption.size != null && isFinite(newOption.size) && newOption.size > 0 &&
+            newOption.size !== optionValue.size) {
+          optionValue.size = newOption.size;
+          changed = true;
+        }
+        if (typeof newOption.outline === 'boolean' && newOption.outline !== optionValue.outline) {
+          optionValue.outline = newOption.outline;
+          changed = true;
+        }
+        setString('outlineColor', true);
+        if (newOption.outlineSize != null && isFinite(newOption.outlineSize) && newOption.outlineSize >= 1 &&
+            newOption.outlineSize !== optionValue.outlineSize) {
+          optionValue.outlineSize = newOption.outlineSize;
+          changed = true;
+        }
+
+        if (changed && hasChanged(optionValue, options.pathPlug)) {
+          options.pathPlug = optionValue;
+          needs.pathPlug = true;
+        }
+      })();
+    }
 
     // label
     ['startLabel', 'endLabel', 'middleLabel'].forEach(function(optionName, i) {
@@ -3521,7 +3914,8 @@
     var props = {
       // Initialize properties as array.
       options: {anchorSE: [], socketSE: [], socketGravitySE: [], plugSE: [], plugColorSE: [], plugSizeSE: [],
-        plugOutlineEnabledSE: [], plugOutlineColorSE: [], plugOutlineSizeSE: [], labelSEM: ['', '', '']},
+        plugOutlineEnabledSE: [], plugOutlineColorSE: [], plugOutlineSizeSE: [], pathPlug: false,
+        labelSEM: ['', '', '']},
       optionIsAttach: {anchorSE: [false, false], labelSEM: [false, false, false]},
       curStats: {}, aplStats: {}, attachments: [], events: {}, reflowTargets: []
     };
@@ -3566,6 +3960,15 @@
       };
     }
 
+    function getKeyById(key2Id, value) {
+      var key;
+      return !value ? KEYWORD_AUTO :
+        Object.keys(key2Id).some(function(optKey) {
+          if (key2Id[optKey] === value) { key = optKey; return true; }
+          return false;
+        }) ? key : new Error('It\'s broken');
+    }
+
     // Setup option accessor methods (direct)
     [['start', 'anchorSE', 0], ['end', 'anchorSE', 1], ['id'], ['color', 'lineColor'], ['size', 'lineSize'],
         ['startSocketGravity', 'socketGravitySE', 0], ['endSocketGravity', 'socketGravitySE', 1],
@@ -3601,18 +4004,31 @@
             var value = // Don't use closure.
                 i != null ? insProps[this._id].options[optionName][i] :
                 optionName ? insProps[this._id].options[optionName] :
-                insProps[this._id].options[propName],
-              key;
-            return !value ? KEYWORD_AUTO :
-              Object.keys(key2Id).some(function(optKey) {
-                if (key2Id[optKey] === value) { key = optKey; return true; }
-                return false;
-              }) ? key : new Error('It\'s broken');
+                insProps[this._id].options[propName];
+            return getKeyById(key2Id, value);
           },
           set: createSetter(propName),
           enumerable: true
         });
       });
+    Object.defineProperty(LeaderLine.prototype, 'pathPlug', {
+      get: function() {
+        var optionValue = insProps[this._id].options.pathPlug;
+        return !optionValue ? false : {
+          show: optionValue.show,
+          plug: getKeyById(PLUG_KEY_2_ID, optionValue.plug),
+          x: optionValue.x,
+          y: optionValue.y,
+          color: optionValue.color == null ? KEYWORD_AUTO : optionValue.color,
+          size: optionValue.size,
+          outline: optionValue.outline,
+          outlineColor: optionValue.outlineColor == null ? KEYWORD_AUTO : optionValue.outlineColor,
+          outlineSize: optionValue.outlineSize
+        };
+      },
+      set: createSetter('pathPlug'),
+      enumerable: true
+    });
     // Setup option accessor methods (effect)
     Object.keys(EFFECTS).forEach(function(effectName) {
       var effectConf = EFFECTS[effectName];

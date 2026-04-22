@@ -334,6 +334,132 @@ describe('options', function() {
       pageDone();
     });
 
+    it('pathPlug is normalized, merged and rebound', function() {
+      var props = window.insProps[ll._id],
+        iframeWindow = document.getElementById('iframe1').contentWindow,
+        iframeDocument = iframeWindow.document,
+        pathPlugName = 'path-plug-diamond';
+
+      expect(props.options.pathPlug).toBe(false);
+      expect(ll.pathPlug).toBe(false);
+
+      window.LeaderLine.registerPlug(pathPlugName, {
+        markup: '<path d="M0,-7 L7,0 0,7 -7,0 Z" />',
+        bBox: {left: -7, top: -7, width: 14, height: 14},
+        noRotate: true,
+        overhead: 0,
+        outlineBase: 1,
+        outlineMax: 4
+      });
+
+      traceLog.clear();
+      ll.pathPlug = {x: 40, y: 60};
+      expect(traceLog.getTaggedLog('setOptions')).toContain('needs.pathPlug');
+      expect(props.options.pathPlug).toEqual(jasmine.objectContaining({
+        show: true,
+        plug: 'disc',
+        x: 40,
+        y: 60,
+        color: null,
+        size: 1,
+        outline: false,
+        outlineColor: null,
+        outlineSize: 1
+      }));
+      expect(ll.pathPlug).toEqual({
+        show: true,
+        plug: 'disc',
+        x: 40,
+        y: 60,
+        color: 'auto',
+        size: 1,
+        outline: false,
+        outlineColor: 'auto',
+        outlineSize: 1
+      });
+
+      traceLog.clear();
+      ll.pathPlug = {plug: pathPlugName, color: 'red', outline: true, outlineSize: 1.5};
+      expect(traceLog.getTaggedLog('setOptions')).toContain('needs.pathPlug');
+      expect(props.options.pathPlug).toEqual(jasmine.objectContaining({
+        show: true,
+        plug: pathPlugName,
+        x: 40,
+        y: 60,
+        color: 'red',
+        size: 1,
+        outline: true,
+        outlineColor: null,
+        outlineSize: 1.5
+      }));
+      expect(ll.pathPlug).toEqual({
+        show: true,
+        plug: pathPlugName,
+        x: 40,
+        y: 60,
+        color: 'red',
+        size: 1,
+        outline: true,
+        outlineColor: 'auto',
+        outlineSize: 1.5
+      });
+      expect(props.baseWindow.document.getElementById('leader-line-' + pathPlugName)).not.toBeNull();
+
+      traceLog.clear();
+      ll.pathPlug = {y: 75, show: false};
+      expect(traceLog.getTaggedLog('setOptions')).toContain('needs.pathPlug');
+      expect(props.options.pathPlug).toEqual(jasmine.objectContaining({
+        show: false,
+        plug: pathPlugName,
+        x: 40,
+        y: 75
+      }));
+      expect(ll.pathPlug).toEqual({
+        show: false,
+        plug: pathPlugName,
+        x: 40,
+        y: 75,
+        color: 'red',
+        size: 1,
+        outline: true,
+        outlineColor: 'auto',
+        outlineSize: 1.5
+      });
+
+      traceLog.clear();
+      ll.pathPlug = {x: 'bad'};
+      expect(traceLog.getTaggedLog('setOptions')).not.toContain('needs.pathPlug');
+      expect(props.options.pathPlug.x).toBe(40);
+
+      traceLog.clear();
+      ll.setOptions({
+        start: iframeDocument.getElementById('elm1'),
+        end: iframeDocument.getElementById('elm2')
+      });
+      expect(traceLog.log).toContain('<bindWindow>');
+      expect(props.baseWindow).toBe(iframeWindow);
+      expect(props.baseWindow.document.getElementById('leader-line-' + pathPlugName)).not.toBeNull();
+      expect(ll.pathPlug).toEqual({
+        show: false,
+        plug: pathPlugName,
+        x: 40,
+        y: 75,
+        color: 'red',
+        size: 1,
+        outline: true,
+        outlineColor: 'auto',
+        outlineSize: 1.5
+      });
+
+      traceLog.clear();
+      ll.pathPlug = false;
+      expect(traceLog.getTaggedLog('setOptions')).toContain('needs.pathPlug');
+      expect(props.options.pathPlug).toBe(false);
+      expect(ll.pathPlug).toBe(false);
+
+      pageDone();
+    });
+
     it('anchorSE are checked', function() {
       var props = window.insProps[ll._id], value;
 
@@ -664,6 +790,23 @@ describe('options', function() {
       pageDone();
     });
 
+    it('needs.pathPlug is affected by options', function() {
+
+      traceLog.clear();
+      ll.pathPlug = {x: 50, y: 60};
+      expect(traceLog.getTaggedLog('setOptions')).toContain('needs.pathPlug');
+
+      traceLog.clear();
+      ll.pathPlug = {x: 'bad'};
+      expect(traceLog.getTaggedLog('setOptions')).not.toContain('needs.pathPlug');
+
+      traceLog.clear();
+      ll.pathPlug = false;
+      expect(traceLog.getTaggedLog('setOptions')).toContain('needs.pathPlug');
+
+      pageDone();
+    });
+
   });
 
   describe('update()', function() {
@@ -778,6 +921,31 @@ describe('options', function() {
       expect(traceLog.getTaggedLog('update')).not.toContain('updated.position');
       expect(traceLog.log).toContain('<updatePosition>');
       expect(traceLog.log).not.toContain('<updatePath>');
+
+      pageDone();
+    });
+
+    it('needs.pathPlug and updated.path affect calling updatePathPlug', function() {
+      var props = window.insProps[ll._id],
+        point;
+
+      ll.endPlug = 'behind';
+      ll.path = 'straight';
+      point = props.linePath.getPointAtLength(props.linePath.getTotalLength() / 2);
+
+      traceLog.clear();
+      ll.pathPlug = {x: point.x, y: point.y};
+      expect(traceLog.getTaggedLog('setOptions')).toContain('needs.pathPlug');
+      expect(traceLog.getTaggedLog('update')).toContain('updated.pathPlug');
+      expect(traceLog.log).toContain('<updatePathPlug>');
+
+      traceLog.clear();
+      ll.path = 'arc';
+      expect(traceLog.getTaggedLog('update')).toContain('updated.path');
+      expect(traceLog.getTaggedLog('update')).toContain('updated.pathPlug');
+      expect(traceLog.log).toContainAll([
+        '<updatePath>', '<updatePathPlug>'
+      ]);
 
       pageDone();
     });

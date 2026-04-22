@@ -520,6 +520,53 @@ The `play` plug above stays right-facing even when used as `startPlug` because `
 
 If your custom SVG hardcodes `fill` or `stroke`, [`startPlugColor`/`endPlugColor`](#startplugcolor-endplugcolor) and plug outlines might not affect it.
 
+### `pathPlug`
+
+*Type:* `false` or Object  
+*Default:* `false`
+
+Render one plug at the nearest point on the current leader line path to an application-supplied point. This is useful for hover affordances such as a bisect handle: your app decides when it should appear and passes mouse coordinates in, and LeaderLine projects that point onto the current path and renders the plug there.
+
+```js
+var pathPlug = {
+  show: false,
+  plug: 'disc',
+  outline: true,
+  size: 1.2,
+  x: 0,
+  y: 0
+};
+
+var line = new LeaderLine(startElement, endElement, {
+  pathPlug: pathPlug
+});
+
+targetElement.addEventListener('pointermove', function(event) {
+  pathPlug.show = true;
+  pathPlug.x = event.clientX;
+  pathPlug.y = event.clientY;
+  line.pathPlug = pathPlug;
+}, false);
+
+targetElement.addEventListener('pointerleave', function() {
+  pathPlug.show = false;
+  line.pathPlug = pathPlug;
+}, false);
+```
+
+The Object can have these properties:
+
+- `show`: Optional boolean. Default is `true`.
+- `plug`: Optional plug name. Default is `disc`. Any built-in plug or one registered by [`LeaderLine.registerPlug()`](#leaderlineregisterplugname-spec) can be used.
+- `x`, `y`: Client coordinates in the bound `baseWindow`. Pass `MouseEvent.clientX` and `MouseEvent.clientY`.
+- `color`: Optional plug color. `'auto'` (default) tracks [`color`](#options-color).
+- `size`: Optional plug size multiplier. Default is `1`.
+- `outline`: Optional boolean. Default is `false`.
+- `outlineColor`: Optional outline color. `'auto'` (default) tracks [`outlineColor`](#outlinecolor).
+- `outlineSize`: Optional outline size multiplier. Default is `1`.
+
+If you call `setOptions({pathPlug: {...}})` or assign `line.pathPlug = {...}` repeatedly, omitted properties keep their previous values. Reusing one `pathPlug` object for high-frequency updates such as `pointermove` avoids allocating a new object each time. Set `false` or `null` to disable the path plug.
+
 ### `startPlugColor`, `endPlugColor`
 
 *Type:* string  

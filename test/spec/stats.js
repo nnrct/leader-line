@@ -827,6 +827,64 @@ describe('stats', function() {
     pageDone();
   });
 
+  it(registerTitle('updatePathPlug()'), function() {
+    var props = window.insProps[ll._id], point, anchorPathData;
+
+    ll.endPlug = 'behind'; // to avoid changing padding by symbol
+    ll.path = 'straight';
+    point = props.linePath.getPointAtLength(props.linePath.getTotalLength() / 2);
+
+    traceLog.clear();
+    ll.pathPlug = {plug: 'arrow3', x: point.x, y: point.y, outline: true};
+    expect(traceLog.getTaggedLog('updatePathPlug')).toContainAll([
+      'pathPlug_enabled=true', 'pathPlug_plug=arrow3', 'pathPlug_color=coral',
+      'pathPlug_markerWidth', 'pathPlug_markerHeight',
+      'pathPlug_anchorPathData', 'pathPlug_markerProp=markerMid',
+      'pathPlug_outlineEnabled=true', 'pathPlug_outlineColor=indianred',
+      'pathPlug_outlineStrokeWidth', 'pathPlug_outlineInStrokeWidth'
+    ]);
+    expect(props.curStats.pathPlug_enabled).toBe(true);
+    expect(props.curStats.pathPlug_plug).toBe('arrow3');
+    expect(props.curStats.viewBox_pathPlugBCircle).toBe(8);
+    expect(props.aplStats.pathPlug_markerProp).toBe('markerMid');
+    expect(props.pathPlugFace.style.display).toBe('inline');
+    expect(props.pathPlugMarker.getAttribute('orient')).toBe('auto');
+    expect(props.pathPlugMarkerFace.href.baseVal).toBe('#leader-line-arrow3');
+    expect(props.pathPlugFace.getPathData()[1].values).toEqual([point.x, point.y]);
+
+    traceLog.clear();
+    ll.color = 'red';
+    expect(traceLog.getTaggedLog('updatePathPlug')).toContainAll([
+      'pathPlug_color=red'
+    ]);
+    expect(props.curStats.pathPlug_color).toBe('red');
+
+    traceLog.clear();
+    ll.outlineColor = 'blue';
+    expect(traceLog.getTaggedLog('updatePathPlug')).toContainAll([
+      'pathPlug_outlineColor=blue'
+    ]);
+    expect(props.curStats.pathPlug_outlineColor).toBe('blue');
+
+    anchorPathData = props.aplStats.pathPlug_anchorPathData;
+    traceLog.clear();
+    ll.path = 'arc';
+    expect(traceLog.getTaggedLog('updatePathPlug')).toContainAll([
+      'pathPlug_anchorPathData'
+    ]);
+    expect(window.pathDataHasChanged(anchorPathData, props.aplStats.pathPlug_anchorPathData)).toBe(true);
+
+    traceLog.clear();
+    ll.pathPlug = false;
+    expect(traceLog.getTaggedLog('updatePathPlug')).toContainAll([
+      'pathPlug_enabled=false'
+    ]);
+    expect(props.curStats.pathPlug_enabled).toBe(false);
+    expect(props.curStats.viewBox_pathPlugBCircle).toBe(0);
+
+    pageDone();
+  });
+
   it(registerTitle('updateViewBox()'), function() {
     var props = window.insProps[ll._id];
 

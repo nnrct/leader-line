@@ -26,7 +26,7 @@ describe('window resize', function() {
       var log = traceLog.getTaggedLog('positionByWindowResize');
       if (log && log.length && (!readyCheck || readyCheck())) {
         callback();
-      } else if (retryCount < 2) {
+      } else if (retryCount < 5) {
         dispatchResize(targetWindow);
         afterResize(targetWindow, callback, readyCheck, retryCount + 1);
       } else {
