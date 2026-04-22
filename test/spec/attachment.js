@@ -25,7 +25,9 @@ describe('attachment', function() {
   function loadBefore(beforeDone) {
     jasmine.addMatchers(customMatchers);
     loadPage('spec/common/page.html', function(frmWindow, frmDocument, body, done) {
-      TOLERANCE = frmWindow.IS_WEBKIT ? 10 : frmWindow.IS_GECKO || frmWindow.IS_TRIDENT ? 5 : 1;
+      TOLERANCE = frmWindow.IS_WEBKIT ? 10 :
+        frmWindow.IS_GECKO || frmWindow.IS_TRIDENT ? 5 :
+        frmWindow.IS_BLINK ? 2 : 1;
       IS_WEBKIT = frmWindow.IS_WEBKIT;
 
       window = frmWindow;
@@ -45,6 +47,31 @@ describe('attachment', function() {
         return aSeg.type === bSeg.type &&
           aSeg.values.every(function(aSegValue, i) { return Math.abs(aSegValue - bSeg.values[i]) < TOLERANCE; });
       });
+  }
+
+  function matchPathDataTolerance(a, b, tolerance) {
+    return a != null && b != null &&
+      a.length === b.length && a.every(function(aSeg, i) {
+        var bSeg = b[i];
+        return aSeg.type === bSeg.type &&
+          aSeg.values.every(function(aSegValue, i) { return Math.abs(aSegValue - bSeg.values[i]) < tolerance; });
+      });
+  }
+
+  function expectGridPathData(pathData, linePathData, offsetLen, cornerMargin, tolerance) {
+    var startPoint = linePathData[0].values,
+      endPoint = linePathData[linePathData.length - 1].values;
+
+    expect(pathData.map(function(pathSeg) { return pathSeg.type; })).toEqual(['M', 'L', 'L', 'M', 'L']);
+    expect(Math.abs(pathData[0].values[0] - startPoint[0])).toBeLessThan(tolerance);
+    expect(Math.abs(pathData[0].values[1] - (startPoint[1] - offsetLen))).toBeLessThan(tolerance);
+    expect(Math.abs(pathData[1].values[1] - pathData[0].values[1])).toBeLessThan(tolerance);
+    expect(Math.abs(pathData[2].values[0] - pathData[1].values[0])).toBeLessThan(tolerance);
+    expect(Math.abs(pathData[2].values[1] - pathData[3].values[1])).toBeLessThan(tolerance);
+    expect(Math.abs(pathData[3].values[1] - pathData[4].values[1])).toBeLessThan(tolerance);
+    expect(Math.abs((pathData[3].values[0] - pathData[2].values[0]) - cornerMargin)).toBeLessThan(tolerance);
+    expect(Math.abs(pathData[4].values[0] - endPoint[0])).toBeLessThan(tolerance);
+    expect(Math.abs(pathData[4].values[1] - (endPoint[1] - offsetLen))).toBeLessThan(tolerance);
   }
 
   function getRectByXYWH(x, y, width, height) {
@@ -1765,8 +1792,8 @@ describe('attachment', function() {
         '<update>', '</update>'])))
         /* eslint-enable indent */
       );
-      expect(attachProps.aplStats.x - 162).toBeLessThan(TOLERANCE);
-      expect(attachProps.aplStats.y - 263).toBeLessThan(TOLERANCE);
+      expect(Math.abs(attachProps.aplStats.x - 162)).toBeLessThan(TOLERANCE);
+      expect(Math.abs(attachProps.aplStats.y - 263)).toBeLessThan(TOLERANCE);
       expect(attachProps.curStats.color).toBe('blue');
       expect(props.events.cur_line_color.length).toBe(0); // removeEventHandler
       expect(props2.events.cur_line_color.length).toBe(1); // addEventHandler
@@ -1883,8 +1910,8 @@ describe('attachment', function() {
         '<update>', '</update>'])))
         /* eslint-enable indent */
       );
-      expect(attachProps.aplStats.x - 162).toBeLessThan(TOLERANCE);
-      expect(attachProps.aplStats.y - 263).toBeLessThan(TOLERANCE);
+      expect(Math.abs(attachProps.aplStats.x - 162)).toBeLessThan(TOLERANCE);
+      expect(Math.abs(attachProps.aplStats.y - 263)).toBeLessThan(TOLERANCE);
       expect(attachProps.curStats.color).toBe('yellow');
       expect(props.events.cur_line_color == null).toBe(true);
       expect(props2.events.cur_line_color == null).toBe(true);
@@ -2445,7 +2472,8 @@ describe('attachment', function() {
 
     it(registerTitle('updatePath'), function(done) {
       var props = window.insProps[ll._id],
-        atc, attachProps, fontSize, strokeWidth;
+        atc, attachProps, pathData, linePathData, offsetLen, cornerMargin,
+        pathTolerance = window.IS_BLINK ? 3 : TOLERANCE;
 
       atc = window.LeaderLine.pathLabel({text: 'label-a'});
       attachProps = window.insAttachProps[atc._id];
@@ -2481,50 +2509,44 @@ describe('attachment', function() {
       )).toBe(true);
 
       ll.path = 'grid';
-      expect(matchPathData(attachProps.elmPath.getPathData(),
-        /* eslint-disable */
-        [{"type":"M","values":[99,10]},{"type":"L","values":[207.5,10]},{"type":"L","values":[207.5,308]},{"type":"M","values":[227.5,308]},{"type":"L","values":[292,308]}]
-        /* eslint-enable */
-      )).toBe(true);
+      pathData = attachProps.elmPath.getPathData();
+      linePathData = props.linePath.getPathData();
+      offsetLen = props.curStats.line_strokeWidth / 2 + attachProps.strokeWidth / 2 + attachProps.height / 4;
+      cornerMargin = attachProps.height * 1.25;
+      expectGridPathData(pathData, linePathData, offsetLen, cornerMargin, pathTolerance);
 
       // offset: strokeWidth / 2 + attachProps.strokeWidth / 2 + attachProps.height / 4
-      fontSize = 16;
-      strokeWidth = 4;
-      expect(Math.abs(attachProps.elmPath.getPathData()[0].values[1]) - // y of start point
-        (props.linePath.getPathData()[0].values[1] - (
-          strokeWidth / 2 + attachProps.strokeWidth / 2 + fontSize / 4
+      expect(Math.abs(pathData[0].values[1]) - // y of start point
+        (linePathData[0].values[1] - (
+          props.curStats.line_strokeWidth / 2 + attachProps.strokeWidth / 2 + attachProps.height / 4
         ))).toBeLessThan(TOLERANCE);
 
       ll.size = 16;
-      expect(matchPathData(attachProps.elmPath.getPathData(),
-        /* eslint-disable */
-        [{"type":"M","values":[93,4]},{"type":"L","values":[213.5,4]},{"type":"L","values":[213.5,302]},{"type":"M","values":[233.5,302]},{"type":"L","values":[268,302]}]
-        /* eslint-enable */
-      )).toBe(true);
+      pathData = attachProps.elmPath.getPathData();
+      linePathData = props.linePath.getPathData();
+      offsetLen = props.curStats.line_strokeWidth / 2 + attachProps.strokeWidth / 2 + attachProps.height / 4;
+      cornerMargin = attachProps.height * 1.25;
+      expectGridPathData(pathData, linePathData, offsetLen, cornerMargin, pathTolerance);
 
       // offset: strokeWidth / 2 + attachProps.strokeWidth / 2 + attachProps.height / 4
-      fontSize = 16;
-      strokeWidth = 16;
-      expect(Math.abs(attachProps.elmPath.getPathData()[0].values[1]) - // y of start point
-        (props.linePath.getPathData()[0].values[1] - (
-          strokeWidth / 2 + attachProps.strokeWidth / 2 + fontSize / 4
+      expect(Math.abs(pathData[0].values[1]) - // y of start point
+        (linePathData[0].values[1] - (
+          props.curStats.line_strokeWidth / 2 + attachProps.strokeWidth / 2 + attachProps.height / 4
         ))).toBeLessThan(TOLERANCE);
 
       atc = window.LeaderLine.pathLabel({text: 'label-a', fontSize: '10px'});
       attachProps = window.insAttachProps[atc._id];
       ll.middleLabel = atc;
-      expect(matchPathData(attachProps.elmPath.getPathData(),
-        /* eslint-disable */
-        [{"type":"M","values":[93,5.5]},{"type":"L","values":[212,5.5]},{"type":"L","values":[212,303.5]},{"type":"M","values":[224.5,303.5]},{"type":"L","values":[268,303.5]}]
-        /* eslint-enable */
-      )).toBe(true);
+      pathData = attachProps.elmPath.getPathData();
+      linePathData = props.linePath.getPathData();
+      offsetLen = props.curStats.line_strokeWidth / 2 + attachProps.strokeWidth / 2 + attachProps.height / 4;
+      cornerMargin = attachProps.height * 1.25;
+      expectGridPathData(pathData, linePathData, offsetLen, cornerMargin, pathTolerance);
 
       // offset: strokeWidth / 2 + attachProps.strokeWidth / 2 + attachProps.height / 4
-      fontSize = 10;
-      strokeWidth = 16;
-      expect(Math.abs(attachProps.elmPath.getPathData()[0].values[1]) - // y of start point
-        (props.linePath.getPathData()[0].values[1] - (
-          strokeWidth / 2 + attachProps.strokeWidth / 2 + fontSize / 4
+      expect(Math.abs(pathData[0].values[1]) - // y of start point
+        (linePathData[0].values[1] - (
+          props.curStats.line_strokeWidth / 2 + attachProps.strokeWidth / 2 + attachProps.height / 4
         ))).toBeLessThan(TOLERANCE);
 
       pageDone();

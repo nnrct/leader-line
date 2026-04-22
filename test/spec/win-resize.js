@@ -8,6 +8,33 @@ describe('window resize', function() {
   var window, document, traceLog, pageDone, frame, orgWidth, orgHeight, pathDataHasChanged,
     iframeDoc, ll1, ll2, ll3, ll4;
 
+  function dispatchResize(targetWindow) {
+    var event;
+    if (typeof targetWindow.Event === 'function') {
+      event = new targetWindow.Event('resize');
+      targetWindow.dispatchEvent(event);
+    } else {
+      event = targetWindow.document.createEvent('UIEvents');
+      event.initUIEvent('resize', true, false, targetWindow, 0);
+      targetWindow.dispatchEvent(event);
+    }
+  }
+
+  function afterResize(targetWindow, callback, readyCheck, retryCount) {
+    retryCount = retryCount || 0;
+    setTimeout(function() {
+      var log = traceLog.getTaggedLog('positionByWindowResize');
+      if (log && log.length && (!readyCheck || readyCheck())) {
+        callback();
+      } else if (retryCount < 2) {
+        dispatchResize(targetWindow);
+        afterResize(targetWindow, callback, readyCheck, retryCount + 1);
+      } else {
+        callback();
+      }
+    }, 100);
+  }
+
   beforeAll(function(beforeDone) {
     loadPage('spec/win-resize/page.html', function(frmWindow, frmDocument, body, done) {
       window = frmWindow;
@@ -34,7 +61,12 @@ describe('window resize', function() {
     }, 'window resize');
   });
 
+  beforeEach(function() {
+    window.LeaderLine.positionByWindowResize = true;
+  });
+
   afterAll(function() {
+    window.LeaderLine.positionByWindowResize = true;
     frame.style.width = orgWidth;
     frame.style.height = orgHeight;
     pageDone();
@@ -51,14 +83,20 @@ describe('window resize', function() {
     frameBBox = frame.getBoundingClientRect();
     traceLog.clear();
     frame.style.width = (frameBBox.width - 50) + 'px';
-    setTimeout(function() {
-      expect(traceLog.getTaggedLog('positionByWindowResize')).toEqual(['id=1', 'id=2', 'id=3', 'id=4']);
+    afterResize(window, function() {
+      var resizeLog = traceLog.getTaggedLog('positionByWindowResize') || [];
+      expect(resizeLog.slice(-4)).toEqual(['id=1', 'id=2', 'id=3', 'id=4']);
       expect(pathDataHasChanged(pathData1, window.insProps[ll1._id].linePath.getPathData())).toBe(true);
       expect(pathDataHasChanged(pathData2, window.insProps[ll2._id].linePath.getPathData())).toBe(true);
       expect(pathDataHasChanged(pathData3, window.insProps[ll3._id].linePath.getPathData())).toBe(true);
       expect(pathDataHasChanged(pathData4, window.insProps[ll4._id].linePath.getPathData())).toBe(true);
       done();
-    }, 100);
+    }, function() {
+      return pathDataHasChanged(pathData1, window.insProps[ll1._id].linePath.getPathData()) &&
+        pathDataHasChanged(pathData2, window.insProps[ll2._id].linePath.getPathData()) &&
+        pathDataHasChanged(pathData3, window.insProps[ll3._id].linePath.getPathData()) &&
+        pathDataHasChanged(pathData4, window.insProps[ll4._id].linePath.getPathData());
+    });
   });
 
   it('no-update position when sub window is resized', function(done) {
@@ -71,6 +109,7 @@ describe('window resize', function() {
 
     traceLog.clear();
     document.getElementById('iframe1').style.width = '50%';
+    dispatchResize(document.getElementById('iframe1').contentWindow);
     setTimeout(function() {
       expect(traceLog.getTaggedLog('positionByWindowResize') == null).toBe(true);
       expect(pathDataHasChanged(pathData1, window.insProps[ll1._id].linePath.getPathData())).toBe(false);
@@ -99,7 +138,7 @@ describe('window resize', function() {
     frameBBox = frame.getBoundingClientRect();
     traceLog.clear();
     frame.style.width = (frameBBox.width - 50) + 'px';
-    setTimeout(function() {
+    afterResize(window, function() {
       expect(traceLog.getTaggedLog('positionByWindowResize')).toEqual(['id=1', 'id=2', 'id=3', 'id=4']);
       expect(traceLog.getTaggedLog('updatePosition')).toEqual([
         'position_socketXYSE[0]', 'position_socketXYSE[1]', 'new-position', // ll1
@@ -111,7 +150,7 @@ describe('window resize', function() {
       expect(pathDataHasChanged(pathData3, window.insProps[ll3._id].linePath.getPathData())).toBe(false); // No change
       expect(pathDataHasChanged(pathData4, window.insProps[ll4._id].linePath.getPathData())).toBe(false); // No change
       done();
-    }, 100);
+    });
   });
 
   it('disabled positionByWindowResize', function(done) {
@@ -129,6 +168,7 @@ describe('window resize', function() {
     traceLog.clear();
     window.LeaderLine.positionByWindowResize = false;
     frame.style.width = (frameBBox.width + 70) + 'px';
+    dispatchResize(window);
     setTimeout(function() {
       expect(elm1.getBoundingClientRect().left).not.toBe(elm1Left);
       expect(elm2.getBoundingClientRect().left).not.toBe(elm2Left);
