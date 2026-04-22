@@ -352,6 +352,19 @@ Note: if you want to handle elements in another window regardless of LeaderLine,
 
 Or you can specify an [attachment](#attachments) instead of HTML/SVG element to indicate something.
 
+### `id`
+
+*Type:* string  
+*Default:* `''`
+
+An `id` attribute for the root `<svg>` element of the leader line.
+
+```js
+var line = new LeaderLine(startElement, endElement, {id: 'tour-step-line'});
+```
+
+This is useful when you want to target a specific line from CSS or DOM APIs later. Set an empty string to remove the `id`.
+
 ### <a name="options-color"></a>`color`
 
 *Type:* string  

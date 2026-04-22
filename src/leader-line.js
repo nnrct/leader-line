@@ -107,6 +107,7 @@
     SHAPE_GAP = IS_TRIDENT || IS_EDGE ? 0.2 : 0.1,
 
     DEFAULT_OPTIONS = {
+      id: '',
       path: PATH_FLUID,
       lineColor: 'coral',
       lineSize: 4,
@@ -911,6 +912,14 @@
     }
   }
 
+  function setSvgId(svg, id) {
+    if (id) {
+      svg.setAttribute('id', id);
+    } else {
+      svg.removeAttribute('id');
+    }
+  }
+
   /**
    * Setup `baseWindow`, stats (`cur*` and `apl*`), SVG elements, etc.
    * @param {props} props - `props` of `LeaderLine` instance.
@@ -971,6 +980,7 @@
 
     // Main SVG
     props.svg = svg = baseDocument.createElementNS(SVG_NS, 'svg');
+    setSvgId(svg, props.options.id);
     svg.className.baseVal = APP_ID;
     if (!svg.viewBox.baseVal) { svg.setAttribute('viewBox', '0 0 0 0'); } // for Firefox bug
     props.defs = defs = svg.appendChild(baseDocument.createElementNS(SVG_NS, 'defs'));
@@ -2642,6 +2652,10 @@
     });
 
     // Line
+    if (setValidType(options, newOptions, 'id',
+        'string', null, null, DEFAULT_OPTIONS.id, null, true) && props.svg) {
+      setSvgId(props.svg, options.id);
+    }
     needs.line = setValidType(options, newOptions, 'color',
       null, 'lineColor', null, DEFAULT_OPTIONS.lineColor, null, true) || needs.line;
     needs.line = setValidType(options, newOptions, 'size',
@@ -3399,7 +3413,7 @@
     }
 
     // Setup option accessor methods (direct)
-    [['start', 'anchorSE', 0], ['end', 'anchorSE', 1], ['color', 'lineColor'], ['size', 'lineSize'],
+    [['start', 'anchorSE', 0], ['end', 'anchorSE', 1], ['id'], ['color', 'lineColor'], ['size', 'lineSize'],
         ['startSocketGravity', 'socketGravitySE', 0], ['endSocketGravity', 'socketGravitySE', 1],
         ['startPlugColor', 'plugColorSE', 0], ['endPlugColor', 'plugColorSE', 1],
         ['startPlugSize', 'plugSizeSE', 0], ['endPlugSize', 'plugSizeSE', 1],

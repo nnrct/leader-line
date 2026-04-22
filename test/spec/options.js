@@ -203,6 +203,57 @@ describe('options', function() {
       pageDone();
     });
 
+    it('id is applied to svg', function() {
+      var props = window.insProps[ll._id],
+        iframeWindow = document.getElementById('iframe1').contentWindow,
+        ll2, props2;
+
+      expect(props.options.id).toBe('');
+      expect(ll.id).toBe('');
+      expect(props.svg.id).toBe('');
+      expect(props.svg.hasAttribute('id')).toBe(false);
+
+      ll2 = new window.LeaderLine(document.getElementById('elm3'), document.getElementById('elm4'), {
+        id: 'leader-line-2'
+      });
+      props2 = window.insProps[ll2._id];
+      expect(props2.options.id).toBe('leader-line-2');
+      expect(ll2.id).toBe('leader-line-2');
+      expect(props2.svg.id).toBe('leader-line-2');
+      expect(props2.svg.hasAttribute('id')).toBe(true);
+      expect(props2.baseWindow.document.getElementById('leader-line-2')).toBe(props2.svg);
+
+      traceLog.clear();
+      ll.id = '  leader-line-1  ';
+      expect(traceLog.getTaggedLog('setOptions')).toEqual([]);
+      expect(props.options.id).toBe('leader-line-1');
+      expect(ll.id).toBe('leader-line-1');
+      expect(props.svg.id).toBe('leader-line-1');
+      expect(props.svg.hasAttribute('id')).toBe(true);
+      expect(props.baseWindow.document.getElementById('leader-line-1')).toBe(props.svg);
+
+      traceLog.clear();
+      ll.setOptions({
+        start: document.getElementById('iframe1').contentDocument.getElementById('elm1'),
+        end: document.getElementById('iframe1').contentDocument.getElementById('elm2')
+      });
+      expect(traceLog.log).toContain('<bindWindow>');
+      expect(props.baseWindow).toBe(iframeWindow);
+      expect(props.options.id).toBe('leader-line-1');
+      expect(props.svg.id).toBe('leader-line-1');
+      expect(props.svg.hasAttribute('id')).toBe(true);
+      expect(props.baseWindow.document.getElementById('leader-line-1')).toBe(props.svg);
+
+      ll.id = '   ';
+      expect(props.options.id).toBe('');
+      expect(ll.id).toBe('');
+      expect(props.svg.id).toBe('');
+      expect(props.svg.hasAttribute('id')).toBe(false);
+
+      ll2.remove();
+      pageDone();
+    });
+
     it('anchorSE are checked', function() {
       var props = window.insProps[ll._id], value;
 
