@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "env": {
+    "browser": true,
+    "es6": true
+  },
+  "rules": {
+    "no-cond-assign": "off",
+    "no-unused-vars": "off",
+    "no-useless-escape": "off",
+    "unicorn/prefer-string-starts-ends-with": "off"
+  },
+  "ignorePatterns": [
+    "leader-line.mjs",
+    "src/defs.js",
+    "test/func-PATH_GRID/*.json.js"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "scripts/**/*.mjs",
+        "test/httpd.mjs"
+      ],
+      "env": {
+        "node": true
+      }
+    },
+    {
+      "files": [
+        "test/spec/**/*.js"
+      ],
+      "env": {
+        "jasmine": true
+      }
+    }
+  ]
+}

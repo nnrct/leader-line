@@ -3,6 +3,7 @@
   "version": "1.0.8",
   "title": "LeaderLine",
   "description": "Draw a leader line in your web page.",
+  "packageManager": "bun@1.3.13",
   "keywords": [
     "leader",
     "line",
@@ -14,28 +15,40 @@
     "bubble",
     "svg"
   ],
-  "main": "leader-line.min.js",
+  "main": "./leader-line.min.js",
+  "module": "./leader-line.mjs",
+  "exports": {
+    ".": {
+      "import": "./leader-line.mjs",
+      "default": "./leader-line.mjs"
+    },
+    "./leader-line.min.js": "./leader-line.min.js",
+    "./leader-line.mjs": "./leader-line.mjs"
+  },
   "files": [
     "leader-line.min.js",
+    "leader-line.mjs",
     "bower.json"
   ],
   "devDependencies": {
-    "anim-event": "^1.0.16",
-    "cheerio": "^1.0.0-rc.9",
-    "clean-css": "^5.1.2",
-    "grunt": "^1.4.1",
-    "grunt-task-helper": "^0.3.10",
-    "htmlclean": "^3.0.8",
-    "jasmine-core": "^3.7.1",
-    "log4js": "^6.4.0",
-    "node-static-alias": "^1.1.2",
-    "plain-draggable": "^2.5.12",
-    "pre-proc": "^1.0.2",
-    "test-page-loader": "^1.0.8",
-    "uglify-js": "^3.13.7"
+    "anim-event": "1.0.16",
+    "cheerio": "1.0.0-rc.9",
+    "clean-css": "5.1.2",
+    "esbuild": "0.25.12",
+    "htmlclean": "3.0.8",
+    "jasmine-core": "3.7.1",
+    "oxlint": "^1.61.0",
+    "plain-draggable": "2.5.12",
+    "pre-proc": "1.0.2",
+    "test-page-loader": "1.0.8"
   },
   "scripts": {
-    "test": "node ./test/httpd"
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "defs": "bun ./scripts/defs.mjs",
+    "funcs": "bun ./scripts/funcs.mjs",
+    "build": "bun ./scripts/build.mjs",
+    "test": "bun ./test/httpd.mjs"
   },
   "homepage": "https://anseki.github.io/leader-line/",
   "repository": {

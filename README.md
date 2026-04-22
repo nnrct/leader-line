@@ -48,6 +48,19 @@ Load LeaderLine into your web page.
 <script src="leader-line.min.js"></script>
 ```
 
+Or use the ESM build.
+
+```html
+<script type="module">
+  import LeaderLine from './leader-line.mjs';
+
+  new LeaderLine(
+    document.getElementById('element-1'),
+    document.getElementById('element-2')
+  );
+</script>
+```
+
 Pass two HTML/SVG elements to `LeaderLine` constructor. Then a leader line is drawn between those elements.
 
 ```js
@@ -159,6 +172,17 @@ new LeaderLine(LeaderLine.mouseHoverAnchor(startElement), endElement);
 [![ex-110](img/ex-110.gif)](https://anseki.github.io/leader-line/)
 
 For more details, refer to the following.
+
+## Development
+
+```sh
+bun install
+bun run lint
+bun run build
+bun run defs
+bun run funcs
+bun run test
+```
 
 ## Constructor
 
