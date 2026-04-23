@@ -219,6 +219,7 @@
     DEFAULT_SHOW_EFFECT = 'fade',
     isAttachment, removeAttachment,
     delayedProcs = [], timerDelayedProc,
+    windowResizeEntries = [],
 
     /** @type {Object.<_id: number, props>} */
     insProps = {}, insId = 0,
@@ -231,6 +232,7 @@
   // [DEBUG]
   window.insProps = insProps;
   window.insAttachProps = insAttachProps;
+  window.windowResizeEntries = windowResizeEntries;
   window.isObject = isObject;
   window.IS_TRIDENT = IS_TRIDENT;
   window.IS_BLINK = IS_BLINK;
@@ -1173,6 +1175,79 @@
     appendCustomPlugDefs(window);
   }
 
+  function findWindowResizeEntry(targetWindow) {
+    var found;
+    windowResizeEntries.some(function(entry, iEntry) {
+      if (entry.window === targetWindow) {
+        found = {entry: entry, iEntry: iEntry};
+        return true;
+      }
+      return false;
+    });
+    return found;
+  }
+
+  function getAnchorElement(props, iAnchor) {
+    var anchor = props.options.anchorSE[iAnchor], attachProps;
+    if (props.optionIsAttach.anchorSE[iAnchor] === false) { return anchor; }
+    attachProps = anchor && insAttachProps[anchor._id];
+    return attachProps && attachProps.element;
+  }
+
+  function isActiveAnchorElement(element) {
+    var doc;
+    return !!((doc = element && element.ownerDocument) &&
+      !(element.compareDocumentPosition(doc) & Node.DOCUMENT_POSITION_DISCONNECTED) &&
+      (!(typeof element.getClientRects === 'function') || element.getClientRects().length));
+  }
+
+  function hasActiveAnchorElements(props) {
+    return isActiveAnchorElement(getAnchorElement(props, 0)) &&
+      isActiveAnchorElement(getAnchorElement(props, 1));
+  }
+
+  function bindWindowResize(props, targetWindow) {
+    var found = findWindowResizeEntry(targetWindow), entry;
+    if (found) {
+      entry = found.entry;
+    } else {
+      entry = {
+        window: targetWindow,
+        props: []
+      };
+      entry.handler = function(/* event */) {
+        traceLog.add('<positionByWindowResize>'); // [DEBUG/]
+        if (LeaderLine.positionByWindowResize) {
+          entry.props.slice().forEach(function(props) {
+            if (insProps[props._id] === props &&
+                props.baseWindow === entry.window &&
+                hasActiveAnchorElements(props)) {
+              traceLog.add('id=%s', props._id); // [DEBUG/]
+              update(props, {position: true});
+            }
+          });
+        }
+        traceLog.add('</positionByWindowResize>'); // [DEBUG/]
+      };
+      entry.listener = AnimEvent.add(entry.handler);
+      targetWindow.addEventListener('resize', entry.listener, false);
+      windowResizeEntries.push(entry);
+    }
+    if (entry.props.indexOf(props) < 0) { entry.props.push(props); }
+  }
+
+  function unbindWindowResize(props, targetWindow) {
+    var found = targetWindow && findWindowResizeEntry(targetWindow), entry, iProps;
+    if (!found) { return; }
+    entry = found.entry;
+    if ((iProps = entry.props.indexOf(props)) > -1) { entry.props.splice(iProps, 1); }
+    if (!entry.props.length) {
+      targetWindow.removeEventListener('resize', entry.listener, false);
+      AnimEvent.remove(entry.handler);
+      windowResizeEntries.splice(found.iEntry, 1);
+    }
+  }
+
   function setSvgId(svg, id) {
     if (id) {
       svg.setAttribute('id', id);
@@ -1232,10 +1307,14 @@
       }
     });
 
+    if (props.baseWindow && props.baseWindow !== newWindow) {
+      unbindWindowResize(props, props.baseWindow);
+    }
     if (props.baseWindow && props.svg) {
       props.baseWindow.document.body.removeChild(props.svg);
     }
     props.baseWindow = newWindow;
+    bindWindowResize(props, newWindow);
     setupWindow(newWindow);
     props.bodyOffset = getBodyOffset(newWindow); // Get `bodyOffset`
 
@@ -4100,6 +4179,7 @@
     if (curStats.show_animId) { anim.remove(curStats.show_animId); }
     props.attachments.slice().forEach(function(attachProps) { unbindAttachment(props, attachProps); });
 
+    if (props.baseWindow) { unbindWindowResize(props, props.baseWindow); }
     if (props.baseWindow && props.svg) {
       props.baseWindow.document.body.removeChild(props.svg);
     }
@@ -5759,26 +5839,6 @@
 
   // Update position automatically
   LeaderLine.positionByWindowResize = true;
-  window.addEventListener('resize', AnimEvent.add(function(/* event */) {
-    traceLog.add('<positionByWindowResize>'); // [DEBUG/]
-    // var eventWindow;
-    if (LeaderLine.positionByWindowResize) {
-      // eventWindow = event.target;
-      Object.keys(insProps).forEach(function(id) {
-        // Checking window may be needed when managing each window is supported.
-        /*
-        var props = insProps[id];
-        if (props.baseWindow === eventWindow) {
-          traceLog.add('id=%s', id); // [DEBUG/]
-          update(props, {position: true});
-        }
-        */
-        traceLog.add('id=%s', id); // [DEBUG/]
-        update(insProps[id], {position: true});
-      });
-    }
-    traceLog.add('</positionByWindowResize>'); // [DEBUG/]
-  }), false);
 
   return LeaderLine;
 })();
