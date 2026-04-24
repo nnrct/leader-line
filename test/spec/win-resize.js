@@ -240,4 +240,18 @@ describe('window resize guards', function() {
       done();
     }, 100);
   });
+
+  it('does not error for disconnected anchors on manual position', function() {
+    var props = window.insProps[ll._id], pathData = props.linePath.getPathData(),
+      elm1 = document.getElementById('elm1');
+
+    spyOn(window.console, 'error');
+    elm1.parentNode.removeChild(elm1);
+
+    traceLog.clear();
+    ll.position();
+
+    expect(window.console.error).not.toHaveBeenCalled();
+    expect(pathDataHasChanged(pathData, props.linePath.getPathData())).toBe(false);
+  });
 });

@@ -610,21 +610,26 @@
    * @returns {(BBox|null)} A bounding-box or null when failed.
    */
   function getBBoxNest(element, baseWindow) {
-    var left = 0, top = 0, bBox, frames;
+    var left = 0, top = 0, bBox, frames, i, frame, coordinates;
     baseWindow = baseWindow || window;
     if (!(frames = getFrames(element, baseWindow))) { return null; }
     if (!frames.length) { // no frame
-      return getBBox(element);
+      return isConnectedElement(element) ? getBBox(element) : null;
     }
-    frames.forEach(function(frame, i) {
-      var coordinates = getBBox(frame, i > 0); // relative to document when 1st one.
+    for (i = 0; i < frames.length; i += 1) {
+      frame = frames[i];
+      if (!isConnectedElement(frame)) { return null; }
+      coordinates = getBBox(frame, i > 0); // relative to document when 1st one.
+      if (!coordinates) { return null; }
       left += coordinates.left;
       top += coordinates.top;
       coordinates = getContentOffset(frame);
       left += coordinates.left;
       top += coordinates.top;
-    });
+    }
+    if (!isConnectedElement(element)) { return null; }
     bBox = getBBox(element, true);
+    if (!bBox) { return null; }
     bBox.left += left;
     bBox.right += left;
     bBox.top += top;
@@ -1194,10 +1199,14 @@
     return attachProps && attachProps.element;
   }
 
-  function isActiveAnchorElement(element) {
+  function isConnectedElement(element) {
     var doc;
     return !!((doc = element && element.ownerDocument) &&
-      !(element.compareDocumentPosition(doc) & Node.DOCUMENT_POSITION_DISCONNECTED) &&
+      !(element.compareDocumentPosition(doc) & Node.DOCUMENT_POSITION_DISCONNECTED));
+  }
+
+  function isActiveAnchorElement(element) {
+    return !!(isConnectedElement(element) &&
       (!(typeof element.getClientRects === 'function') || element.getClientRects().length));
   }
 
@@ -1907,11 +1916,20 @@
           attachProps.conf.getBBoxNest(attachProps, props, strokeWidth) :
           getBBoxNest(anchor, props.baseWindow);
 
-      curStats.capsMaskAnchor_pathDataSE[i] = isAttach !== false && attachProps.conf.getPathData ?
-        attachProps.conf.getPathData(attachProps, props, strokeWidth) : bBox2PathData(anchorBBox);
-      curStats.capsMaskAnchor_strokeWidthSE[i] = strokeWidth;
+      if (anchorBBox) {
+        curStats.capsMaskAnchor_pathDataSE[i] = isAttach !== false && attachProps.conf.getPathData ?
+          attachProps.conf.getPathData(attachProps, props, strokeWidth) || curStats.capsMaskAnchor_pathDataSE[i] :
+          bBox2PathData(anchorBBox);
+        curStats.capsMaskAnchor_strokeWidthSE[i] = strokeWidth;
+      }
       return anchorBBox;
     });
+
+    if (!anchorBBoxSE[0] || !anchorBBoxSE[1]) {
+      traceLog.add('not-updated'); // [DEBUG/]
+      traceLog.add('</updatePosition>'); // [DEBUG/]
+      return false;
+    }
 
     // Decide each socket
     (function() {
@@ -4339,7 +4357,10 @@
 
       getBBoxNest: function(attachProps, props) {
         var bBox = getBBoxNest(attachProps.element, props.baseWindow),
-          width = bBox.width, height = bBox.height;
+          width, height;
+        if (!bBox) { return null; }
+        width = bBox.width;
+        height = bBox.height;
         bBox.width = bBox.height = 0;
         bBox.left = bBox.right = bBox.left + attachProps.x[0] * (attachProps.x[1] ? width : 1);
         bBox.top = bBox.bottom = bBox.top + attachProps.y[0] * (attachProps.y[1] ? height : 1);
@@ -4534,6 +4555,7 @@
 
       getPathData: function(attachProps, props) {
         var bBox = getBBoxNest(attachProps.element, props.baseWindow);
+        if (!bBox) { return attachProps.curStats.pathData || null; }
         return pathList2PathData(attachProps.curStats.pathListRel, function(point) {
           point.x += bBox.left;
           point.y += bBox.top;
@@ -4543,6 +4565,7 @@
       getBBoxNest: function(attachProps, props) {
         var bBox = getBBoxNest(attachProps.element, props.baseWindow),
           bBoxRel = attachProps.curStats.bBoxRel;
+        if (!bBox) { return null; }
         return {
           left: bBoxRel.left + bBox.left,
           top: bBoxRel.top + bBox.top,
@@ -4559,11 +4582,22 @@
           llStats = attachProps.boundTargets.length ? attachProps.boundTargets[0].props.curStats : null,
           elementBBox, value, updated = {};
 
+        if (!isConnectedElement(attachProps.element)) {
+          traceLog.add('not-updated'); // [DEBUG/]
+          traceLog.add('</ATTACHMENTS.areaAnchor.update>'); // [DEBUG/]
+          return false;
+        }
+
         updated.strokeWidth = setStat(attachProps, curStats, 'strokeWidth',
           attachProps.size != null ? attachProps.size :
             (llStats ? llStats.line_strokeWidth : DEFAULT_OPTIONS.lineSize));
 
         elementBBox = getBBox(attachProps.element);
+        if (!elementBBox) {
+          traceLog.add('not-updated'); // [DEBUG/]
+          traceLog.add('</ATTACHMENTS.areaAnchor.update>'); // [DEBUG/]
+          return false;
+        }
         updated.elementWidth = setStat(attachProps, curStats, 'elementWidth', elementBBox.width);
         updated.elementHeight = setStat(attachProps, curStats, 'elementHeight', elementBBox.height);
         updated.elementLeft = setStat(attachProps, curStats, 'elementLeft', elementBBox.left);

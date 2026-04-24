@@ -702,6 +702,27 @@ describe('attachment', function() {
       done();
     });
 
+    it(registerTitle('pointAnchor-disconnected'), function(done) {
+      var props = window.insProps[ll._id],
+        atc = window.LeaderLine.pointAnchor({element: document.getElementById('elm1')}),
+        pathData;
+
+      ll.start = atc;
+      pathData = props.linePath.getPathData();
+
+      spyOn(window.console, 'error');
+      document.getElementById('elm1').parentNode.removeChild(document.getElementById('elm1'));
+
+      traceLog.clear();
+      ll.position();
+
+      expect(window.console.error).not.toHaveBeenCalled();
+      expect(props.linePath.getPathData()).toEqual(pathData);
+
+      pageDone();
+      done();
+    });
+
     it(registerTitle('areaAnchor-attachOptions'), function(done) {
       var props = window.insProps[ll._id],
         atc, attachProps, len, gap;
@@ -805,6 +826,27 @@ describe('attachment', function() {
       expect(attachProps.aplStats.dashLen).toBe(len);
       expect(attachProps.aplStats.dashGap).toBe(gap);
       expect(attachProps.path.style.strokeDasharray.replace(/\s|px/g, '')).toBe(len + ',' + gap);
+
+      pageDone();
+      done();
+    });
+
+    it(registerTitle('areaAnchor-disconnected'), function(done) {
+      var props = window.insProps[ll._id],
+        atc = window.LeaderLine.areaAnchor({element: document.getElementById('elm1'), size: 0}),
+        pathData;
+
+      ll.start = atc;
+      pathData = props.linePath.getPathData();
+
+      spyOn(window.console, 'error');
+      document.getElementById('elm1').parentNode.removeChild(document.getElementById('elm1'));
+
+      traceLog.clear();
+      ll.position();
+
+      expect(window.console.error).not.toHaveBeenCalled();
+      expect(props.linePath.getPathData()).toEqual(pathData);
 
       pageDone();
       done();
