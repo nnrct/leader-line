@@ -261,7 +261,7 @@ describe('options', function() {
 
       container1.id = 'leader-line-container-1';
       container1.style.cssText = 'position: absolute; left: 20px; top: 25px; width: 600px; height: 500px;';
-      container2.style.cssText = 'position: relative; width: 600px; height: 500px;';
+      container2.style.cssText = 'position: absolute; left: 60px; top: 75px; width: 600px; height: 500px;';
 
       ll2 = new window.LeaderLine(document.getElementById('elm1'), document.getElementById('elm2'), {
         container: '#leader-line-container-1'
@@ -270,6 +270,7 @@ describe('options', function() {
       svg = props2.svg;
       expect(props2.options.container).toBe(container1);
       expect(ll2.container).toBe(container1);
+      expect(ll2.containerContext).toBe('auto');
       expect(svg.parentNode).toBe(container1);
 
       bBox = window.getBBoxNest(container1, props2.baseWindow);
@@ -284,9 +285,24 @@ describe('options', function() {
       expect(props2.svg.parentNode).toBe(container2);
       expect(container1.contains(svg)).toBe(false);
 
+      ll2.containerContext = 'document';
+      expect(ll2.containerContext).toBe('document');
+      expect(Math.abs(parseFloat(props2.svg.style.left) -
+        (props2.svg.viewBox.baseVal.x + props2.bodyOffset.x))).toBeLessThan(1);
+      expect(Math.abs(parseFloat(props2.svg.style.top) -
+        (props2.svg.viewBox.baseVal.y + props2.bodyOffset.y))).toBeLessThan(1);
+
+      ll2.containerContext = 'viewport';
+      expect(ll2.containerContext).toBe('viewport');
+      expect(Math.abs(parseFloat(props2.svg.style.left) -
+        (props2.svg.viewBox.baseVal.x - props2.baseWindow.pageXOffset))).toBeLessThan(1);
+      expect(Math.abs(parseFloat(props2.svg.style.top) -
+        (props2.svg.viewBox.baseVal.y - props2.baseWindow.pageYOffset))).toBeLessThan(1);
+
       ll2.container = null;
       expect(props2.options.container).toBe(null);
       expect(ll2.container).toBe(document.body);
+      expect(ll2.containerContext).toBe('viewport');
       expect(props2.svg.parentNode).toBe(document.body);
 
       svg = props2.svg;

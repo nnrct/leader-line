@@ -48,6 +48,10 @@
     PATH_KEY_2_ID = {
       straight: PATH_STRAIGHT, arc: PATH_ARC, fluid: PATH_FLUID, magnet: PATH_MAGNET, grid: PATH_GRID},
 
+    CONTAINER_CONTEXT_AUTO = 1, CONTAINER_CONTEXT_DOCUMENT = 2, CONTAINER_CONTEXT_VIEWPORT = 3,
+    CONTAINER_CONTEXT_KEY_2_ID = {
+      auto: CONTAINER_CONTEXT_AUTO, document: CONTAINER_CONTEXT_DOCUMENT, viewport: CONTAINER_CONTEXT_VIEWPORT},
+
     /**
      * @typedef {Object} SymbolConf
      * @property {string} elmId
@@ -120,6 +124,7 @@
     DEFAULT_OPTIONS = {
       id: '',
       container: null,
+      containerContext: CONTAINER_CONTEXT_AUTO,
       path: PATH_FLUID,
       lineColor: 'coral',
       lineSize: 4,
@@ -1172,10 +1177,6 @@
     return bodyOffset;
   }
 
-  function getRenderContainer(props, baseWindow) {
-    return props.options.container || baseWindow.document.body;
-  }
-
   function removeSvg(props) {
     if (props.svg && props.svg.parentNode) { props.svg.parentNode.removeChild(props.svg); }
   }
@@ -1207,8 +1208,18 @@
   }
 
   function getRenderOffset(props) {
-    var baseWindow = props.baseWindow, baseDocument = baseWindow.document,
-      element = props.svg && props.svg.parentNode, styles, bBox;
+    var baseWindow = props.baseWindow, baseDocument, element, styles, bBox, renderOffset;
+
+    if (props.renderContext === CONTAINER_CONTEXT_DOCUMENT) { return props.bodyOffset; }
+    if (props.renderContext === CONTAINER_CONTEXT_VIEWPORT) {
+      renderOffset = props.viewportOffset;
+      renderOffset.x = -baseWindow.pageXOffset;
+      renderOffset.y = -baseWindow.pageYOffset;
+      return renderOffset;
+    }
+
+    baseDocument = baseWindow.document;
+    element = props.svg && props.svg.parentNode;
 
     while (element && element !== baseDocument) {
       if (element.nodeType === Node.ELEMENT_NODE) {
@@ -1383,6 +1394,8 @@
     bindWindowResize(props, newWindow);
     setupWindow(newWindow);
     props.bodyOffset = getBodyOffset(newWindow); // Get `bodyOffset`
+    props.renderContainer = props.options.container || baseDocument.body;
+    props.renderContext = props.options.container ? props.options.containerContext : CONTAINER_CONTEXT_DOCUMENT;
 
     // Main SVG
     props.svg = svg = baseDocument.createElementNS(SVG_NS, 'svg');
@@ -1553,7 +1566,7 @@
       svg.style.visibility = 'hidden';
     }
 
-    getRenderContainer(props, newWindow).appendChild(svg);
+    props.renderContainer.appendChild(svg);
 
     // label (after appendChild(svg), bBox is used)
     [0, 1, 2].forEach(function(i) {
@@ -2683,7 +2696,7 @@
       curBBox = curStats.viewBox_bBox, aplBBox = aplStats.viewBox_bBox,
       curRenderOffset = curStats.viewBox_renderOffset, aplRenderOffset = aplStats.viewBox_renderOffset,
       viewBox = props.svg.viewBox.baseVal, styles = props.svg.style,
-      renderOffset = props.options.container ? getRenderOffset(props) : props.bodyOffset,
+      renderOffset = props.renderContext === CONTAINER_CONTEXT_DOCUMENT ? props.bodyOffset : getRenderOffset(props),
       updated = false;
 
     // Expand bBox with `line` or symbols, and event
@@ -3127,6 +3140,7 @@
       Names of `options`      Keys of API (properties of `newOptions`)
       ----------------------------------------
       container               container
+      containerContext        containerContext
       anchorSE                start, end
       lineColor               color
       lineSize                size
@@ -3145,7 +3159,8 @@
       labelSEM                startLabel, endLabel, middleLabel
     */
     var options = props.options,
-      newWindow, needsWindow, needs = {}, hasContainerOption, newContainer, containerChanged;
+      newWindow, needsWindow, needs = {},
+      hasContainerOption, newContainer, containerChanged, containerContextChanged;
 
     function getCurOption(root, propName, optionName, index, defaultValue) {
       var curOption = {};
@@ -3255,10 +3270,14 @@
         containerChanged = true;
       }
     }
+    containerContextChanged = setValidId(options, newOptions, 'containerContext',
+      CONTAINER_CONTEXT_KEY_2_ID, null, null, DEFAULT_OPTIONS.containerContext);
 
     if (newWindow !== props.baseWindow || containerChanged) {
       bindWindow(props, newWindow);
       needs.line = needs.plug = needs.lineOutline = needs.plugOutline = needs.faces = needs.effect = true;
+    } else if (containerContextChanged) {
+      props.renderContext = options.container ? options.containerContext : CONTAINER_CONTEXT_DOCUMENT;
     }
 
     needs.position = setValidId(options, newOptions, 'path',
@@ -4094,7 +4113,8 @@
         plugOutlineEnabledSE: [], plugOutlineColorSE: [], plugOutlineSizeSE: [], pathPlug: false,
         labelSEM: ['', '', '']},
       optionIsAttach: {anchorSE: [false, false], labelSEM: [false, false, false]},
-      curStats: {}, aplStats: {}, attachments: [], events: {}, reflowTargets: []
+      curStats: {}, aplStats: {}, attachments: [], events: {}, reflowTargets: [],
+      viewportOffset: {x: 0, y: 0}
     };
 
     initStats(props.curStats, STATS);
@@ -4171,7 +4191,7 @@
         });
       });
     // Setup option accessor methods (key-to-id)
-    [['path', PATH_KEY_2_ID],
+    [['containerContext', CONTAINER_CONTEXT_KEY_2_ID], ['path', PATH_KEY_2_ID],
         ['startSocket', SOCKET_KEY_2_ID, 'socketSE', 0], ['endSocket', SOCKET_KEY_2_ID, 'socketSE', 1],
         ['startPlug', PLUG_KEY_2_ID, 'plugSE', 0], ['endPlug', PLUG_KEY_2_ID, 'plugSE', 1]]
       .forEach(function(conf) {

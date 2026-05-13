@@ -371,6 +371,26 @@ var line2 = new LeaderLine(startElement, endElement, {
 
 Set `container` to `null` to use `document.body` again. If you want the container to be the positioning context for the line SVG, give the container a non-`static` CSS `position`, for example `position: relative`.
 
+### `containerContext`
+
+*Type:* string<br>
+*Default:* `'auto'`
+
+How the [`container`](#container) is positioned relative to the document coordinates that LeaderLine uses internally.
+
+- `'auto'`: Detect the positioned render context and adjust the line SVG for that element. This is the safest mode for arbitrary containers.
+- `'document'`: Assume the container uses the same document coordinate space as `document.body`. This is the fastest custom-container mode for document-aligned overlays.
+- `'viewport'`: Assume the container is a fixed viewport overlay, for example `position: fixed; inset: 0`.
+
+```js
+var line = new LeaderLine(startElement, endElement, {
+  container: '#line-container',
+  containerContext: 'document'
+});
+```
+
+When `container` is not specified, LeaderLine uses the same behavior as `document.body` regardless of this option.
+
 ### `id`
 
 *Type:* string  
