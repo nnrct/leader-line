@@ -352,6 +352,25 @@ Note: if you want to handle elements in another window regardless of LeaderLine,
 
 Or you can specify an [attachment](#attachments) instead of HTML/SVG element to indicate something.
 
+### `container`
+
+*Type:* DOM element or string<br>
+*Default:* `document.body`
+
+The DOM element to which the root `<svg>` element of the leader line is appended. If a string is specified, it is passed to `querySelector` of the document in the common window of [`start` and `end`](#start-end).
+
+```js
+var line = new LeaderLine(startElement, endElement, {
+  container: document.getElementById('line-container')
+});
+
+var line2 = new LeaderLine(startElement, endElement, {
+  container: '#line-container'
+});
+```
+
+Set `container` to `null` to use `document.body` again. If you want the container to be the positioning context for the line SVG, give the container a non-`static` CSS `position`, for example `position: relative`.
+
 ### `id`
 
 *Type:* string  

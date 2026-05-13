@@ -119,6 +119,7 @@
 
     DEFAULT_OPTIONS = {
       id: '',
+      container: null,
       path: PATH_FLUID,
       lineColor: 'coral',
       lineSize: 4,
@@ -196,7 +197,8 @@
       position_socketXYSE: {hasSE: true, hasProps: true}, position_plugOverheadSE: {hasSE: true},
       position_path: {}, position_lineStrokeWidth: {}, position_socketGravitySE: {hasSE: true},
       path_pathData: {}, path_edge: {hasProps: true},
-      viewBox_bBox: {hasProps: true}, viewBox_plugBCircleSE: {hasSE: true}, viewBox_pathPlugBCircle: {iniValue: 0},
+      viewBox_bBox: {hasProps: true}, viewBox_renderOffset: {hasProps: true},
+      viewBox_plugBCircleSE: {hasSE: true}, viewBox_pathPlugBCircle: {iniValue: 0},
       lineMask_enabled: {iniValue: false},
       lineMask_outlineMode: {iniValue: false},
       lineMask_x: {}, lineMask_y: {},
@@ -1170,6 +1172,63 @@
     return bodyOffset;
   }
 
+  function getRenderContainer(props, baseWindow) {
+    return props.options.container || baseWindow.document.body;
+  }
+
+  function removeSvg(props) {
+    if (props.svg && props.svg.parentNode) { props.svg.parentNode.removeChild(props.svg); }
+  }
+
+  function resolveContainer(container, baseDocument) {
+    var resolvedContainer = container;
+    if (container == null) { return null; }
+    if (typeof container === 'string') {
+      try {
+        resolvedContainer = container ? baseDocument.querySelector(container) : null;
+      } catch (error) {
+        console.error('Invalid `container` selector: ' + error.message);
+        return false;
+      }
+    }
+    if (!resolvedContainer || !isElement(resolvedContainer)) {
+      console.error('A `container` must be an Element or a selector that matches an Element.');
+      return false;
+    }
+    if (resolvedContainer.ownerDocument !== baseDocument) {
+      console.error('A `container` must be in the common window of `start` and `end`.');
+      return false;
+    }
+    if (!isConnectedElement(resolvedContainer)) {
+      console.error('A disconnected element was passed as `container`.');
+      return false;
+    }
+    return resolvedContainer;
+  }
+
+  function getRenderOffset(props) {
+    var baseWindow = props.baseWindow, baseDocument = baseWindow.document,
+      element = props.svg && props.svg.parentNode, styles, bBox;
+
+    while (element && element !== baseDocument) {
+      if (element.nodeType === Node.ELEMENT_NODE) {
+        styles = baseWindow.getComputedStyle(element, '');
+        if (styles.position !== 'static') { break; }
+      }
+      element = element.parentNode;
+    }
+
+    if (!element || element === baseDocument ||
+        element === baseDocument.body || element === baseDocument.documentElement) {
+      return props.bodyOffset;
+    }
+    bBox = getBBoxNest(element, baseWindow);
+    return bBox ? {
+      x: -bBox.left - element.clientLeft + element.scrollLeft,
+      y: -bBox.top - element.clientTop + element.scrollTop
+    } : {x: 0, y: 0};
+  }
+
   function setupWindow(window) {
     var baseDocument = window.document, defsSvg;
     if (!baseDocument.getElementById(DEFS_ID)) { // Add svg defs
@@ -1319,9 +1378,7 @@
     if (props.baseWindow && props.baseWindow !== newWindow) {
       unbindWindowResize(props, props.baseWindow);
     }
-    if (props.baseWindow && props.svg) {
-      props.baseWindow.document.body.removeChild(props.svg);
-    }
+    removeSvg(props);
     props.baseWindow = newWindow;
     bindWindowResize(props, newWindow);
     setupWindow(newWindow);
@@ -1496,7 +1553,7 @@
       svg.style.visibility = 'hidden';
     }
 
-    baseDocument.body.appendChild(svg);
+    getRenderContainer(props, newWindow).appendChild(svg);
 
     // label (after appendChild(svg), bBox is used)
     [0, 1, 2].forEach(function(i) {
@@ -2624,7 +2681,9 @@
     var curStats = props.curStats, aplStats = props.aplStats,
       curEdge = curStats.path_edge, padding, edge,
       curBBox = curStats.viewBox_bBox, aplBBox = aplStats.viewBox_bBox,
+      curRenderOffset = curStats.viewBox_renderOffset, aplRenderOffset = aplStats.viewBox_renderOffset,
       viewBox = props.svg.viewBox.baseVal, styles = props.svg.style,
+      renderOffset = props.options.container ? getRenderOffset(props) : props.bodyOffset,
       updated = false;
 
     // Expand bBox with `line` or symbols, and event
@@ -2641,14 +2700,18 @@
     curBBox.y = curStats.lineMask_y = curStats.lineOutlineMask_y = curStats.maskBGRect_y = edge.y1;
     curBBox.width = edge.x2 - edge.x1;
     curBBox.height = edge.y2 - edge.y1;
+    curRenderOffset.x = renderOffset.x;
+    curRenderOffset.y = renderOffset.y;
 
     ['x', 'y', 'width', 'height'].forEach(function(boxKey) {
       var value;
-      if ((value = curBBox[boxKey]) !== aplBBox[boxKey]) {
+      if ((value = curBBox[boxKey]) !== aplBBox[boxKey] ||
+          (boxKey === 'x' || boxKey === 'y') && renderOffset[boxKey] !== aplRenderOffset[boxKey]) {
         traceLog.add(boxKey); // [DEBUG/]
         viewBox[boxKey] = aplBBox[boxKey] = value;
+        if (boxKey === 'x' || boxKey === 'y') { aplRenderOffset[boxKey] = renderOffset[boxKey]; }
         styles[BBOX_PROP[boxKey]] = value +
-          (boxKey === 'x' || boxKey === 'y' ? props.bodyOffset[boxKey] : 0) + 'px';
+          (boxKey === 'x' || boxKey === 'y' ? renderOffset[boxKey] : 0) + 'px';
         updated = true;
       }
     });
@@ -3063,6 +3126,7 @@
     /*
       Names of `options`      Keys of API (properties of `newOptions`)
       ----------------------------------------
+      container               container
       anchorSE                start, end
       lineColor               color
       lineSize                size
@@ -3081,7 +3145,7 @@
       labelSEM                startLabel, endLabel, middleLabel
     */
     var options = props.options,
-      newWindow, needsWindow, needs = {};
+      newWindow, needsWindow, needs = {}, hasContainerOption, newContainer, containerChanged;
 
     function getCurOption(root, propName, optionName, index, defaultValue) {
       var curOption = {};
@@ -3170,13 +3234,29 @@
     }
 
     // Check window.
-    if (needsWindow &&
-        (newWindow = getCommonWindow(
-          props.optionIsAttach.anchorSE[0] !== false ?
-            insAttachProps[options.anchorSE[0]._id].element : options.anchorSE[0],
-          props.optionIsAttach.anchorSE[1] !== false ?
-            insAttachProps[options.anchorSE[1]._id].element : options.anchorSE[1]
-        )) !== props.baseWindow) {
+    newWindow = needsWindow ? getCommonWindow(
+      props.optionIsAttach.anchorSE[0] !== false ?
+        insAttachProps[options.anchorSE[0]._id].element : options.anchorSE[0],
+      props.optionIsAttach.anchorSE[1] !== false ?
+        insAttachProps[options.anchorSE[1]._id].element : options.anchorSE[1]
+    ) : props.baseWindow;
+
+    hasContainerOption = Object.prototype.hasOwnProperty.call(newOptions, 'container');
+    if (newWindow) {
+      if (hasContainerOption) {
+        newContainer = resolveContainer(newOptions.container, newWindow.document);
+        if (newContainer !== false && newContainer !== options.container) {
+          options.container = newContainer;
+          containerChanged = true;
+        }
+      }
+      if (options.container && options.container.ownerDocument !== newWindow.document) {
+        options.container = null;
+        containerChanged = true;
+      }
+    }
+
+    if (newWindow !== props.baseWindow || containerChanged) {
       bindWindow(props, newWindow);
       needs.line = needs.plug = needs.lineOutline = needs.plugOutline = needs.faces = needs.effect = true;
     }
@@ -4108,6 +4188,14 @@
           enumerable: true
         });
       });
+    Object.defineProperty(LeaderLine.prototype, 'container', {
+      get: function() {
+        var props = insProps[this._id];
+        return props.options.container || props.baseWindow && props.baseWindow.document.body || null;
+      },
+      set: createSetter('container'),
+      enumerable: true
+    });
     Object.defineProperty(LeaderLine.prototype, 'pathPlug', {
       get: function() {
         var optionValue = insProps[this._id].options.pathPlug;
@@ -4198,9 +4286,7 @@
     props.attachments.slice().forEach(function(attachProps) { unbindAttachment(props, attachProps); });
 
     if (props.baseWindow) { unbindWindowResize(props, props.baseWindow); }
-    if (props.baseWindow && props.svg) {
-      props.baseWindow.document.body.removeChild(props.svg);
-    }
+    removeSvg(props);
     delete insProps[this._id];
   };
 

@@ -254,6 +254,49 @@ describe('options', function() {
       pageDone();
     });
 
+    it('container controls svg parent', function() {
+      var container1 = document.body.appendChild(document.createElement('section')),
+        container2 = document.body.appendChild(document.createElement('section')),
+        ll2, props2, svg, bBox, expectedLeft, expectedTop;
+
+      container1.id = 'leader-line-container-1';
+      container1.style.cssText = 'position: absolute; left: 20px; top: 25px; width: 600px; height: 500px;';
+      container2.style.cssText = 'position: relative; width: 600px; height: 500px;';
+
+      ll2 = new window.LeaderLine(document.getElementById('elm1'), document.getElementById('elm2'), {
+        container: '#leader-line-container-1'
+      });
+      props2 = window.insProps[ll2._id];
+      svg = props2.svg;
+      expect(props2.options.container).toBe(container1);
+      expect(ll2.container).toBe(container1);
+      expect(svg.parentNode).toBe(container1);
+
+      bBox = window.getBBoxNest(container1, props2.baseWindow);
+      expectedLeft = svg.viewBox.baseVal.x - bBox.left - container1.clientLeft + container1.scrollLeft;
+      expectedTop = svg.viewBox.baseVal.y - bBox.top - container1.clientTop + container1.scrollTop;
+      expect(Math.abs(parseFloat(svg.style.left) - expectedLeft)).toBeLessThan(1);
+      expect(Math.abs(parseFloat(svg.style.top) - expectedTop)).toBeLessThan(1);
+
+      ll2.container = container2;
+      expect(props2.options.container).toBe(container2);
+      expect(ll2.container).toBe(container2);
+      expect(props2.svg.parentNode).toBe(container2);
+      expect(container1.contains(svg)).toBe(false);
+
+      ll2.container = null;
+      expect(props2.options.container).toBe(null);
+      expect(ll2.container).toBe(document.body);
+      expect(props2.svg.parentNode).toBe(document.body);
+
+      svg = props2.svg;
+      ll2.remove();
+      expect(svg.parentNode).toBe(null);
+      document.body.removeChild(container1);
+      document.body.removeChild(container2);
+      pageDone();
+    });
+
     it('custom plugs can be registered and used', function() {
       var props = window.insProps[ll._id],
         iframeWindow = document.getElementById('iframe1').contentWindow,
