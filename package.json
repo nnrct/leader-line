@@ -31,14 +31,14 @@
     "bower.json"
   ],
   "devDependencies": {
-    "anim-event": "1.0.16",
-    "cheerio": "1.0.0-rc.9",
-    "clean-css": "5.1.2",
-    "esbuild": "0.25.12",
+    "anim-event": "1.0.17",
+    "cheerio": "1.2.0",
+    "clean-css": "5.3.3",
+    "esbuild": "0.28.0",
     "htmlclean": "3.0.8",
     "jasmine-core": "3.7.1",
-    "oxlint": "^1.61.0",
-    "plain-draggable": "2.5.12",
+    "oxlint": "^1.64.0",
+    "plain-draggable": "2.5.15",
     "pre-proc": "1.0.2",
     "test-page-loader": "1.0.8"
   },
